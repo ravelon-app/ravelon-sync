@@ -1,0 +1,71 @@
+# Ravelon Sync, the simple way: one container, SQLite, one volume.
+#
+#   cp .env.example .env
+#   ./scripts/generate-secrets.sh >> .env      # then remove the placeholder lines
+#   docker compose up -d
+#
+# Put a reverse proxy with TLS in front of it. Ravelon clients refuse plain
+# HTTP for anything except 127.0.0.1, so a public deployment needs HTTPS.
+#
+# For PostgreSQL instead of SQLite, see compose.postgres.yaml.
+
+name: ravelon-sync
+
+services:
+  sync:
+    image: ghcr.io/ravelon-app/ravelon-sync:latest
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4100
+      HOST: 0.0.0.0
+
+      # Required. Independent random values, at least 32 bytes each.
+      SYNC_JWT_SECRET: ${SYNC_JWT_SECRET:?Set SYNC_JWT_SECRET in .env}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY in .env}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set SETTINGS_ENCRYPTION_KEY in .env}
+
+      # The public origin people reach this server at. Invitation and reset
+      # links are built from it, so it has to be right.
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+
+      # Only your reverse proxy's address belongs here. Trusting anything else
+      # lets a client forge its own IP and slip the rate limits.
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+
+      DATABASE_FILE: /data/ravelon-sync.db
+
+      # Optional. Without mail, invitations and resets are links you copy from
+      # the admin interface.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Ravelon Sync <sync@localhost>}
+
+      VAULT_STORAGE_LIMIT_MB: ${VAULT_STORAGE_LIMIT_MB:-256}
+      VAULTS_PER_USER: ${VAULTS_PER_USER:-50}
+    volumes:
+      - sync_data:/data
+    ports:
+      # Bound to loopback by default: the reverse proxy is what faces the
+      # internet, not this container.
+      - "${BIND_IP:-127.0.0.1}:${PORT:-4100}:4100"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  sync_data:

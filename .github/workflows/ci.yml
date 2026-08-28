@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the floor package.json advertises, 26 is what the image ships.
+        # Testing both keeps the engines field honest instead of aspirational.
+        node: ["22", "26"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit high severity
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify a fresh deployment answers
+        env:
+          NODE_ENV: production
+          PORT: "4199"
+          HOST: 127.0.0.1
+          PUBLIC_URL: http://127.0.0.1:4199
+          DATABASE_FILE: ./ci-data/ci.db
+          WEB_ROOT: ./server/public
+        run: |
+          SYNC_JWT_SECRET="$(openssl rand -base64 48)" \
+          MFA_ENCRYPTION_KEY="$(openssl rand -base64 48)" \
+          SETTINGS_ENCRYPTION_KEY="$(openssl rand -base64 48)" \
+          node server/dist/main.js &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            sleep 1
+            curl -fsS "http://127.0.0.1:4199/healthz" >/dev/null 2>&1 && break
+          done
+
+          # A Ravelon client calls /v1/health before it will add a server at
+          # all, and refuses one that claims to be an official build without a
+          # licence. Breaking this makes the release unusable, silently.
+          curl -fsS http://127.0.0.1:4199/v1/health | grep -q '"officialBuild":false'
+          curl -fsS http://127.0.0.1:4199/v1/public-config | grep -q '"needsSetup":true'
+
+          # The interface has to come off the same process and the same port.
+          curl -fsS http://127.0.0.1:4199/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:4199/vaults | grep -q '<div id="root">'
+
+          # An unknown API path is an error, not the single-page app. No -f
+          # here: a 404 is the expected answer, and -f would make curl itself
+          # exit non-zero for it.
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4199/v1/nope)" = "404"

@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+/* --- design tokens ---------------------------------------------------------
+   The Ravelon palette from DESIGN.md, dark-first because this is an
+   infrastructure tool that sits next to a terminal. No gradients, no glow: the
+   structure comes from surfaces, hairlines and spacing, and the teal accent is
+   spent sparingly on the one thing that matters in a view.
+
+   Values are RGB triples so Tailwind's `/opacity` syntax works on them. */
+@theme {
+  --color-ink: rgb(11 17 23); /* #0B1117 page */
+  --color-surface: rgb(17 26 34); /* #111A22 panel */
+  --color-raised: rgb(23 35 46); /* #17232E hover, input */
+  --color-line: rgb(38 52 66); /* #263442 hairline */
+  --color-line-soft: rgb(30 42 54); /* quieter divider inside a panel */
+  --color-fg: rgb(244 247 250); /* #F4F7FA primary text */
+  --color-fg2: rgb(158 171 184); /* #9EABB8 secondary */
+  --color-fg3: rgb(102 118 133); /* #667685 muted, labels */
+  --color-teal: rgb(22 214 199); /* #16D6C7 accent */
+  --color-teal-deep: rgb(0 184 169); /* #00B8A9 accent pressed */
+  --color-warn: rgb(217 154 43); /* #D99A2B */
+  --color-danger: rgb(217 80 80); /* #D95050 */
+  --color-ok: rgb(74 191 140);
+
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11" on, "ss01" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* One focus treatment everywhere, so keyboard navigation is always legible
+   against the dark surfaces. */
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgb(22 214 199 / 0.25);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 999px;
+  border: 2px solid var(--color-ink);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(58 76 94);
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Number inputs keep their spinners off; every numeric field here is a
+   deliberate value an operator types, not something to nudge. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+@utility panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+}
+
+@utility label-caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-fg3);
+}
+
+/* Entrances are short and only move a few pixels. A settings page that
+   performs is a settings page that gets in the way. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade {
+  animation: fade 0.2s ease both;
+}
+
+.animate-spin-slow {
+  animation: spin 0.7s linear infinite;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-fade,
+  .animate-pulse-dot {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

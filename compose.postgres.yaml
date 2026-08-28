@@ -1,0 +1,74 @@
+# Ravelon Sync backed by PostgreSQL.
+#
+#   docker compose -f compose.postgres.yaml up -d
+#
+# Use this when you want replicas, or you already run PostgreSQL and would
+# rather back it up with everything else. SQLite (compose.yaml) is the simpler
+# choice for a single instance and handles a small team without complaint.
+
+name: ravelon-sync
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ravelon_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-ravelon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  sync:
+    image: ghcr.io/ravelon-app/ravelon-sync:latest
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4100
+      HOST: 0.0.0.0
+      SYNC_JWT_SECRET: ${SYNC_JWT_SECRET:?Set SYNC_JWT_SECRET in .env}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY in .env}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set SETTINGS_ENCRYPTION_KEY in .env}
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ravelon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ravelon_sync}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Ravelon Sync <sync@localhost>}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${PORT:-4100}:4100"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
