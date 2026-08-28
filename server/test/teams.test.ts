@@ -123,6 +123,32 @@ describe('teams and shared vaults', () => {
     assert.equal(push.body.error.code, 'vault_write_required');
   });
 
+  test('each member keeps separate wrapped key material, including viewers', async () => {
+    const ownerMaterial = { version: 1, ciphertext: 'owner-envelope', nonce: 'owner-nonce' };
+    const memberMaterial = { version: 1, ciphertext: 'member-envelope', nonce: 'member-nonce' };
+
+    const ownerStored = await api(server, 'PUT', '/v1/vault/key-material', {
+      token: owner.accessToken,
+      body: { vaultId: teamVaultId, material: ownerMaterial },
+    });
+    assert.equal(ownerStored.status, 200);
+
+    const viewerStored = await api(server, 'PUT', '/v1/vault/key-material', {
+      token: member.accessToken,
+      body: { vaultId: teamVaultId, material: memberMaterial },
+    });
+    assert.equal(viewerStored.status, 200);
+
+    const ownerRead = await api(server, 'GET', `/v1/vault/key-material?vaultId=${teamVaultId}`, {
+      token: owner.accessToken,
+    });
+    const memberRead = await api(server, 'GET', `/v1/vault/key-material?vaultId=${teamVaultId}`, {
+      token: member.accessToken,
+    });
+    assert.deepEqual(ownerRead.body.material, ownerMaterial);
+    assert.deepEqual(memberRead.body.material, memberMaterial);
+  });
+
   test('a member cannot promote themselves', async () => {
     const response = await api(server, 'PATCH', `/v1/teams/${teamId}/members/${member.userId}`, {
       token: member.accessToken,

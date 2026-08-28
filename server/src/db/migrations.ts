@@ -292,4 +292,26 @@ CREATE TABLE counters (
 INSERT INTO counters (name, value) VALUES ('sync_cursor', 0);
 `,
   },
+  {
+    // A team can contain accounts with different sync passphrases. Keeping one
+    // envelope per vault let the last member overwrite every other member's
+    // second-device bootstrap material. Existing rows belonged to the vault
+    // creator, so preserve them for that account while changing the key.
+    name: '002_user_scoped_vault_key_material',
+    sql: `
+CREATE TABLE vault_user_key_material (
+  vault_id TEXT NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  material_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (vault_id, user_id)
+);
+CREATE INDEX idx_vault_user_key_material_user ON vault_user_key_material(user_id);
+
+INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
+SELECT material.vault_id, vaults.user_id, material.material_json, material.updated_at
+FROM vault_key_material AS material
+JOIN vaults ON vaults.id = material.vault_id;
+`,
+  },
 ];

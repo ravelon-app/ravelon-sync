@@ -186,8 +186,10 @@ so a client that reconnected after a restart notices a cursor it missed.
 ### Vault key material
 
 `PUT /v1/vault/key-material` with `{ vaultId, material }`, and `GET` with
-`?vaultId=`. Stored and returned verbatim. Material whose field names suggest
-an unwrapped secret is refused with `raw_vault_key_material`.
+`?vaultId=`. Stored and returned verbatim for the authenticated account, so
+different team members cannot overwrite each other's passphrase-wrapped
+envelopes. Material whose field names suggest an unwrapped secret is refused
+with `raw_vault_key_material`.
 
 ## Vaults and teams
 

@@ -31,11 +31,12 @@ Tuesday. They cannot tell what any of them are.
 ciphertext and nonce verbatim and returns them byte for byte. It never
 inspects, normalises or re-encodes them.
 
-**Vault key material.** Wrapped by the client, stored opaquely, handed back to
-another device that can unwrap it with the account's sync passphrase. The
-server refuses to store anything whose field names suggest an unwrapped
-secret (`masterPassword`, `privateKey`, `dek`, …), so a client bug becomes a
-loud failure rather than a quiet leak.
+**Vault key material.** Wrapped by the client, stored opaquely per account and
+vault, then handed back to another device that can unwrap it with that
+account's sync passphrase. A team member therefore cannot overwrite another
+member's envelope. The server refuses to store anything whose field names
+suggest an unwrapped secret (`masterPassword`, `privateKey`, `dek`, …), so a
+client bug becomes a loud failure rather than a quiet leak.
 
 **Plaintext guard.** A push whose ciphertext parses as JSON, or base64-decodes
 to readable JSON, is rejected with `plaintext_sync_payload`. This exists

@@ -272,7 +272,7 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
   });
 
   /**
-   * Wrapped vault keys, stored and returned verbatim.
+   * Wrapped vault keys, stored and returned verbatim for this account.
    *
    * This is how a second device joins a vault: it receives key material it can
    * unwrap with the account's own sync passphrase. The server holds the
@@ -288,9 +288,6 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     }).parse(request.body);
 
     const vault = await requireVaultAccess(db, auth.user.id, body.vaultId);
-    if (!vaultRoleCanWrite(vault.member_role)) {
-      throw new ApiError(403, 'vault_write_required', 'This vault is read-only for your role');
-    }
     assertOpaqueKeyMaterial(body.material);
 
     const serialized = JSON.stringify(body.material);
@@ -298,13 +295,12 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       throw new ApiError(413, 'key_material_too_large', 'Vault key material is too large');
     }
     await db.prepare(
-      `INSERT INTO vault_key_material (vault_id, material_json, updated_at, updated_by_user_id)
+      `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(vault_id) DO UPDATE SET
+       ON CONFLICT(vault_id, user_id) DO UPDATE SET
          material_json = excluded.material_json,
-         updated_at = excluded.updated_at,
-         updated_by_user_id = excluded.updated_by_user_id`,
-    ).run(vault.id, serialized, nowIso(), auth.user.id);
+         updated_at = excluded.updated_at`,
+    ).run(vault.id, auth.user.id, serialized, nowIso());
     await audit(db, auth.user.id, 'vault.key_material_updated', `vault:${vault.id}`, null, clientIp(request));
     return { stored: true };
   });
@@ -315,8 +311,8 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     const query = z.object({ vaultId: z.string().min(1).max(160) }).parse(request.query);
     const vault = await requireVaultAccess(db, auth.user.id, query.vaultId);
     const row = await db.prepare(
-      'SELECT material_json, updated_at FROM vault_key_material WHERE vault_id = ?',
-    ).get<{ material_json: string; updated_at: string }>(vault.id);
+      'SELECT material_json, updated_at FROM vault_user_key_material WHERE vault_id = ? AND user_id = ?',
+    ).get<{ material_json: string; updated_at: string }>(vault.id, auth.user.id);
     if (!row) throw new ApiError(404, 'key_material_not_found', 'No key material stored for this vault');
     return {
       vaultId: vault.id,
