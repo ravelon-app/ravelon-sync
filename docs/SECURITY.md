@@ -5,8 +5,11 @@ What this server protects, how, and what it does not protect against.
 ## The short version
 
 Ravelon Sync stores ciphertext. Vault contents are encrypted on your devices
-with a sync passphrase the server never receives and cannot derive. Taking the
-server, or the database, or a backup does not get anyone into a vault.
+with an account secret the server never receives in the clear and cannot
+derive: it holds only an envelope sealed under an Argon2id key that the device
+derives from the account password, and a scrypt hash of that password from
+which no such key can be rebuilt. Taking the server, or the database, or a
+backup does not get anyone into a vault.
 
 That is the whole design. Everything below is either how it is enforced or
 where the boundary actually sits.
@@ -32,11 +35,13 @@ ciphertext and nonce verbatim and returns them byte for byte. It never
 inspects, normalises or re-encodes them.
 
 **Vault key material.** Wrapped by the client, stored opaquely per account and
-vault, then handed back to another device that can unwrap it with that
-account's sync passphrase. A team member therefore cannot overwrite another
-member's envelope. The server refuses to store anything whose field names
-suggest an unwrapped secret (`masterPassword`, `privateKey`, `dek`, …), so a
-client bug becomes a loud failure rather than a quiet leak.
+vault, then handed back to another device of the same account. For the personal
+vault this is the account secret sealed under the account password
+(`ravelon-account-key-v1`); for a Team Vault it is the sharing key sealed under
+the account secret. A team member therefore cannot overwrite another member's
+envelope. The server refuses to store anything whose field names suggest an
+unwrapped secret (`masterPassword`, `privateKey`, `dek`, …), so a client bug
+becomes a loud failure rather than a quiet leak.
 
 **Plaintext guard.** A push whose ciphertext parses as JSON, or base64-decodes
 to readable JSON, is rejected with `plaintext_sync_payload`. This exists
@@ -123,10 +128,15 @@ Being honest about the boundary matters more than the list above.
 
 - **A compromised client.** Malware on a device that holds an unlocked vault
   reads the plaintext. Nothing the server does can help.
-- **A weak sync passphrase.** It is the only thing between an attacker holding
-  your ciphertext and your credentials. Choose accordingly.
-- **A lost sync passphrase.** There is no recovery. Not by you, not by an
-  administrator, not by anyone. This is what "the server cannot read it" means.
+- **A weak account password.** The envelope holding the account secret is sealed
+  under it, so it is the only thing between an attacker holding your ciphertext
+  and your credentials. Choose accordingly.
+- **A forgotten password with no signed-in device left.** A password reset lets
+  you back into the account, not into the vault: the envelope stays sealed under
+  the old password. Any device that still holds the secret re-seals it under the
+  new password on its next sign-in. Without one, there is no recovery, not by
+  you, not by an administrator, not by anyone. This is what "the server cannot
+  read it" means.
 - **A malicious operator, over time.** Someone controlling the server can
   observe metadata, and could serve a modified web interface to anyone using
   it. They still cannot decrypt existing records, and the desktop and iOS
@@ -147,5 +157,5 @@ helps. You will get an acknowledgement within a few days.
 
 Out of scope: missing headers with no demonstrated impact, rate limits on
 unauthenticated endpoints that are already limited, attacks requiring a
-compromised client or a leaked sync passphrase, and anything requiring physical
+compromised client or a leaked account password, and anything requiring physical
 access to an unlocked device.
