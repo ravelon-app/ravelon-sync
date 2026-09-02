@@ -185,8 +185,11 @@ so a client that reconnected after a restart notices a cursor it missed.
 
 ### Vault key material
 
-`PUT /v1/vault/key-material` with `{ vaultId, material }`, and `GET` with
-`?vaultId=`. Stored and returned verbatim for the authenticated account, so
+`PUT /v1/vault/key-material` with `{ vaultId, material, ifAbsent? }`, and
+`GET` with `?vaultId=`. With `ifAbsent: true` the envelope is created only when
+none exists and `409 key_material_exists` is answered otherwise, which is how
+two first devices of one account settle on one secret. Stored and returned
+verbatim for the authenticated account, so
 different team members cannot overwrite each other's envelopes. Clients keep
 two kinds here: for the personal vault, the account secret sealed under a key
 derived from the account password (`{ version: 1, purpose:

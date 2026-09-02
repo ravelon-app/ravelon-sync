@@ -70,7 +70,7 @@ The overview page in the web interface shows the exact URL to enter.
 | | |
 | --- | --- |
 | **Vault contents** | Encrypted on your devices. The server sees an opaque blob and a record type, never a hostname, a password or a key. |
-| **Account secret** | Random, generated on the first device. Stored here only inside an envelope sealed with Argon2id over the account password, which the server cannot reproduce from its scrypt hash. |
+| **Account secret** | Random, generated on the first device. Stored here only inside an envelope sealed with Argon2id over the account password, which cannot be rebuilt from the stored scrypt hash. The password does reach the server at sign-in, so the guarantee is against data at rest, not against an operator hostile at that moment; see [SECURITY.md](docs/SECURITY.md). |
 | **Passwords** | scrypt, N=2^15, per-password salt, parameters stored with the hash. |
 | **Refresh tokens** | Rotated on every use and stored only as SHA-256 digests. Presenting a rotated token revokes the device. |
 | **Authenticator secrets** | AES-256-GCM with a key derived for that purpose alone. |

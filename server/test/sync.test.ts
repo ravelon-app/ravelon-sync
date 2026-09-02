@@ -303,6 +303,36 @@ describe('vault key material', () => {
     assert.deepEqual(read.body.material, material);
   });
 
+
+  test('a first device can ask to create the envelope only if none exists', async () => {
+    const first = { version: 1, purpose: 'ravelon-account-key-v1', salt: 's', nonce: 'n1', ciphertext: 'c1' };
+    const second = { version: 1, purpose: 'ravelon-account-key-v1', salt: 's', nonce: 'n2', ciphertext: 'c2' };
+    // The personal vault exists from registration; a client-chosen id only
+    // comes into being with the first push.
+    const me = await api(server, 'GET', '/v1/account/me', { token: user.accessToken });
+    const personal = me.body.vaults.find((vault: { kind: string }) => vault.kind === 'personal').id;
+    const created = await api(server, 'PUT', '/v1/vault/key-material', {
+      token: user.accessToken,
+      body: { vaultId: personal, material: first, ifAbsent: true },
+    });
+    assert.equal(created.status, 200);
+    const refused = await api(server, 'PUT', '/v1/vault/key-material', {
+      token: user.accessToken,
+      body: { vaultId: personal, material: second, ifAbsent: true },
+    });
+    assert.equal(refused.status, 409);
+    assert.equal(refused.body.error.code, 'key_material_exists');
+    const read = await api(server, 'GET', `/v1/vault/key-material?vaultId=${personal}`, {
+      token: user.accessToken,
+    });
+    assert.deepEqual(read.body.material, first);
+    // Without the flag a PUT still replaces, which re-sealing after a password change needs.
+    const replaced = await api(server, 'PUT', '/v1/vault/key-material', {
+      token: user.accessToken,
+      body: { vaultId: personal, material: second },
+    });
+    assert.equal(replaced.status, 200);
+  });
   test('an unwrapped secret is refused', async () => {
     const response = await api(server, 'PUT', '/v1/vault/key-material', {
       token: user.accessToken,

@@ -285,6 +285,12 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     const body = z.object({
       vaultId: z.string().min(1).max(160),
       material: z.record(z.string(), z.unknown()),
+      // "Create, never replace." Two first devices of one account can both find
+      // no envelope and both mint a secret; without this the later PUT would
+      // silently overwrite the earlier one and the two devices would encrypt
+      // under different keys. With it, the second PUT is refused with 409 and
+      // that device adopts the envelope that won.
+      ifAbsent: z.boolean().optional(),
     }).parse(request.body);
 
     const vault = await requireVaultAccess(db, auth.user.id, body.vaultId);
@@ -294,13 +300,24 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     if (serialized.length > 256 * 1024) {
       throw new ApiError(413, 'key_material_too_large', 'Vault key material is too large');
     }
-    await db.prepare(
-      `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(vault_id, user_id) DO UPDATE SET
-         material_json = excluded.material_json,
-         updated_at = excluded.updated_at`,
-    ).run(vault.id, auth.user.id, serialized, nowIso());
+    if (body.ifAbsent) {
+      const inserted = await db.prepare(
+        `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(vault_id, user_id) DO NOTHING`,
+      ).run(vault.id, auth.user.id, serialized, nowIso());
+      if (inserted.changes === 0) {
+        throw new ApiError(409, 'key_material_exists', 'Key material for this vault already exists');
+      }
+    } else {
+      await db.prepare(
+        `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(vault_id, user_id) DO UPDATE SET
+           material_json = excluded.material_json,
+           updated_at = excluded.updated_at`,
+      ).run(vault.id, auth.user.id, serialized, nowIso());
+    }
     await audit(db, auth.user.id, 'vault.key_material_updated', `vault:${vault.id}`, null, clientIp(request));
     return { stored: true };
   });

@@ -5,11 +5,17 @@ What this server protects, how, and what it does not protect against.
 ## The short version
 
 Ravelon Sync stores ciphertext. Vault contents are encrypted on your devices
-with an account secret the server never receives in the clear and cannot
-derive: it holds only an envelope sealed under an Argon2id key that the device
-derives from the account password, and a scrypt hash of that password from
-which no such key can be rebuilt. Taking the server, or the database, or a
-backup does not get anyone into a vault.
+with an account secret the server never receives in the clear: it holds only
+an envelope sealed under an Argon2id key that the device derives from the
+account password. Taking the server, or the database, or a backup does not get
+anyone into a vault: the stored scrypt hash cannot rebuild that key.
+
+The boundary sits at sign-in. The password itself reaches the server over TLS
+when a device authenticates, as with any password login. A server that is
+malicious *while you sign in* could therefore keep it and open your envelope.
+The protection is against everything that happens to the data at rest and
+against an operator who only ever sees the database; it is not a defence
+against an operator who is hostile at the moment you type your password.
 
 That is the whole design. Everything below is either how it is enforced or
 where the boundary actually sits.
@@ -137,10 +143,15 @@ Being honest about the boundary matters more than the list above.
   new password on its next sign-in. Without one, there is no recovery, not by
   you, not by an administrator, not by anyone. This is what "the server cannot
   read it" means.
+- **A malicious operator at sign-in.** Someone controlling the server while a
+  device signs in sees the account password and can derive the envelope key.
+  Nothing stored at rest lets them do that later; a captured password does.
+  Choose who you sign in to accordingly, and treat a compromised server as a
+  reason to change the password from a still-trusted device, which re-seals
+  the envelope.
 - **A malicious operator, over time.** Someone controlling the server can
   observe metadata, and could serve a modified web interface to anyone using
-  it. They still cannot decrypt existing records, and the desktop and iOS
-  clients do not load code from the server at all.
+  it. The desktop and iOS clients do not load code from the server at all.
 - **Traffic analysis.** Record sizes and sync timing are visible to anyone who
   can see the traffic or the database.
 - **A stolen device with a live session.** Revoke it from **Devices**. Do that
