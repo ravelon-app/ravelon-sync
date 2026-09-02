@@ -10,8 +10,9 @@ Two things, together:
 A database without `MFA_ENCRYPTION_KEY` leaves everyone with two-factor unable
 to complete a sign-in. Restoring one without the other is not a restore.
 
-What you do *not* have, and cannot back up, is anyone's sync passphrase. It
-never reaches the server. Backups contain ciphertext; they are not a way to
+What you do *not* have, and cannot back up, is anyone's account secret in the
+clear. It reaches the server only sealed under a key derived from the account
+password on the device. Backups contain ciphertext; they are not a way to
 recover somebody's vault contents, and that is the point.
 
 ## SQLite
@@ -91,7 +92,9 @@ match the database.
 
 ## What a restore cannot fix
 
-- **A lost sync passphrase.** Nothing recovers vault contents without it.
+- **A forgotten account password with no signed-in device left.** A reset gets
+  the person back into the account, not into the vault; nothing recovers the
+  contents without a device that still holds the secret.
 - **A lost `MFA_ENCRYPTION_KEY`.** Every account must enrol again. With at
   least one administrator able to sign in, they can clear the others.
 - **Records deleted before the backup.** Version history is bounded by the

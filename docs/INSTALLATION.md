@@ -156,11 +156,13 @@ for you to copy. Both work; the second needs no mail server at all.
 
 ## 7. Connect a client
 
-Ravelon desktop: **Settings → Sync → Self hosted**, enter your server URL, sign
-in. The overview page shows the exact URL.
+Ravelon desktop: **Settings → Account & sync → Own server**, enter your server
+URL, sign in with your e-mail and password. The overview page shows the exact
+URL.
 
-The sync passphrase is set on the device. It is not your account password and
-it never reaches the server.
+There is nothing else to set up. The device derives the encryption key from
+the account password; the server only ever receives the sealed envelope that
+holds the account secret.
 
 ## Configuring email
 

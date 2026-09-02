@@ -9,8 +9,9 @@ agent workspace. Run it yourself, invite your team, and keep your connection
 data on infrastructure you control.
 
 The server stores ciphertext it cannot read. Hosts, credentials, SSH keys and
-snippets are encrypted on your devices with a sync passphrase that never leaves
-them. Running the server does not give you, or anyone who takes it, a way into
+snippets are encrypted on your devices with an account secret that only ever
+reaches the server sealed under a key derived from the account password on the
+device. Running the server does not give you, or anyone who takes it, a way into
 anybody's vault.
 
 - One container, one port, one volume
@@ -57,9 +58,10 @@ PUBLIC_URL=https://sync.example.com npm start
 
 ## Connecting a client
 
-In the Ravelon desktop app: **Settings → Sync → Self hosted**, enter your
-server URL, and sign in. iOS works the same way. Your sync passphrase is set on
-the device and is never sent anywhere.
+In the Ravelon desktop app: **Settings → Account & sync → Own server**, enter
+your server URL, and sign in with your e-mail and password. iOS works the same
+way. That is the whole setup: the encryption key is derived from the password
+on the device, and the server only ever receives the sealed envelope.
 
 The overview page in the web interface shows the exact URL to enter.
 
@@ -68,7 +70,7 @@ The overview page in the web interface shows the exact URL to enter.
 | | |
 | --- | --- |
 | **Vault contents** | Encrypted on your devices. The server sees an opaque blob and a record type, never a hostname, a password or a key. |
-| **Sync passphrase** | Never transmitted. Not derivable from anything the server holds. |
+| **Account secret** | Random, generated on the first device. Stored here only inside an envelope sealed with Argon2id over the account password, which cannot be rebuilt from the stored scrypt hash. The password does reach the server at sign-in, so the guarantee is against data at rest, not against an operator hostile at that moment; see [SECURITY.md](docs/SECURITY.md). |
 | **Passwords** | scrypt, N=2^15, per-password salt, parameters stored with the hash. |
 | **Refresh tokens** | Rotated on every use and stored only as SHA-256 digests. Presenting a rotated token revokes the device. |
 | **Authenticator secrets** | AES-256-GCM with a key derived for that purpose alone. |
