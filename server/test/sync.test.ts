@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 
@@ -350,4 +351,32 @@ describe('vault key material', () => {
     assert.equal(response.status, 400);
     assert.equal(response.body.error.code, 'raw_vault_key_material');
   });
+});
+
+test('VNC TLS and Apple settings survive self-hosted encrypted sync', async () => {
+  const server = await startTestServer();
+  try {
+    const user = await register(server, 'vnc-roundtrip@example.test');
+    for (const security of ['x509', 'anonymousTls', 'apple']) {
+    const host = { protocol: 'vnc', address: 'desktop.example.test', username: 'fixture-user', secret: 'synthetic-password', jumpHostId: 'ssh-gateway', vnc: { security, tlsServerName: 'desktop.example.test', caCertificate: 'public CA fixture', allowUnauthenticated: false } };
+    const key = randomBytes(32);
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    const ciphertext = Buffer.concat([cipher.update(JSON.stringify(host)), cipher.final(), cipher.getAuthTag()]).toString('base64');
+    const record = syncItem(`vnc-${security}`, 'vnc-vault', { ciphertext, nonce: nonce.toString('base64') });
+    const push = await api(server, 'POST', '/v1/sync/push', { token: user.accessToken, body: { vaultId: 'vnc-vault', items: [record] } });
+    assert.equal(push.status, 200);
+    const pull = await api(server, 'GET', '/v1/sync/pull?vaultId=vnc-vault&cursor=0', { token: user.accessToken });
+    assert.equal(pull.status, 200);
+    const item = pull.body.items.find((entry: { id: string }) => entry.id === record.id);
+    assert.equal(item.ciphertext, ciphertext);
+    assert.equal(item.nonce, nonce.toString('base64'));
+    assert.equal(JSON.stringify(item).includes(host.secret), false);
+    assert.equal(JSON.stringify(item).includes(host.address), false);
+    const bytes = Buffer.from(item.ciphertext, 'base64');
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(item.nonce, 'base64'));
+    decipher.setAuthTag(bytes.subarray(-16));
+    assert.deepEqual(JSON.parse(Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]).toString()), host);
+    }
+  } finally { await server.close(); }
 });

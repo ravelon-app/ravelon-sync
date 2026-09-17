@@ -113,6 +113,14 @@ one before using it.
 
 The part that matters. The server never decrypts anything here.
 
+Host protocols are client-side data inside the encrypted `Host` payload. This
+includes VNC security mode (TLS/VeNCrypt or Apple Remote Desktop), certificate
+server name, public CA certificates, SSH jump-host references and saved credentials.
+The server must preserve ciphertext byte-for-byte and must not parse these fields.
+No VNC-specific migration, environment variable, gateway or listener is needed.
+Older clients must preserve host fields they do not understand; use an updated
+client to edit VNC security settings.
+
 ### `POST /v1/sync/push`
 
 ```json
