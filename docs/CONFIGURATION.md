@@ -9,7 +9,7 @@ day to day lives in the web interface instead, under
 | Variable | Notes |
 | --- | --- |
 | `SYNC_JWT_SECRET` | Signs access tokens. At least 32 bytes. Changing it signs everyone out. |
-| `PUBLIC_URL` | The exact origin people reach this server at, no path. Invitation and reset links are built from it. |
+| `PUBLIC_URL` | The exact origin people reach this server at, no path. Invitation, pairing and reset links are built from it. The server refuses to start in production without it. |
 
 `MFA_ENCRYPTION_KEY` and `SETTINGS_ENCRYPTION_KEY` fall back to
 `SYNC_JWT_SECRET`, which starts the server but couples them: rotating the JWT
@@ -76,8 +76,8 @@ password encrypted with `SETTINGS_ENCRYPTION_KEY`.
 | `RATE_LIMIT_DISABLED` | `false` | Leave it. Off removes brute-force protection on sign-in. |
 | `RATE_LIMIT_AUTH_PER_IP` | `30` | Auth requests per minute per IP. |
 | `RATE_LIMIT_AUTH_FAILURES` | `10` | Failures per account per 15 minutes before lockout. |
-| `RATE_LIMIT_SYNC_PER_USER` | `240` | |
-| `RATE_LIMIT_API_PER_USER` | `600` | |
+| `RATE_LIMIT_SYNC_PER_USER` | `240` | Sync push and pull per account per minute. |
+| `RATE_LIMIT_API_PER_USER` | `600` | Other authenticated `/v1/` requests per account per minute. Sync and the desktop vault routes are not counted here. |
 
 ## Settings in the web interface
 
@@ -100,7 +100,7 @@ These live in the database and change without a restart.
 | --- | --- |
 | `open` | Anyone who can reach the server. |
 | `invite` | Only people holding a link you issued. The default. |
-| `domain` | Anyone with an address at a listed domain. |
+| `domain` | Anyone with an address at a listed domain. They sync only after confirming the address, so this needs working mail. |
 | `closed` | Nobody through the form. Your invitations still work. |
 
 The first account on a fresh deployment is always allowed, whatever the mode

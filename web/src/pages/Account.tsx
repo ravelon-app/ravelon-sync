@@ -132,18 +132,28 @@ function VerificationPanel() {
 
 function PasswordPanel() {
   const { t } = useI18n();
+  const account = useAccount();
   const { run, pending, error, done } = useAction();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const changed = await run(() =>
-      api.post("/v1/auth/password/change", { currentPassword, newPassword }),
-    );
+    // The endpoint answers 204, so success is signalled explicitly rather
+    // than read from the empty response body.
+    const changed = await run(async () => {
+      await api.post("/v1/auth/password/change", {
+        currentPassword,
+        newPassword,
+        ...(account.mfaEnabled && mfaCode.trim() ? { mfaCode: mfaCode.trim() } : {}),
+      });
+      return true;
+    });
     if (changed === undefined) return;
     setCurrentPassword("");
     setNewPassword("");
+    setMfaCode("");
   };
 
   return (
@@ -177,6 +187,19 @@ function PasswordPanel() {
             required
           />
         </Field>
+        {account.mfaEnabled ? (
+          <Field label={t("auth.mfaCode")} hint={t("auth.mfaRecoveryHint")} htmlFor="password-mfa">
+            <Input
+              id="password-mfa"
+              value={mfaCode}
+              onChange={(event) => setMfaCode(event.target.value)}
+              autoComplete="one-time-code"
+              className="font-mono tracking-[0.2em]"
+              placeholder="000000"
+              required
+            />
+          </Field>
+        ) : null}
         <div className="flex justify-end">
           <Button type="submit" variant="primary" loading={pending}>
             {t("account.changePassword")}

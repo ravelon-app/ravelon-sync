@@ -222,6 +222,10 @@ export function registerTeamRoutes(app: FastifyInstance, context: RouteContext):
       // The previous owner stays as an administrator rather than losing access.
       await db.prepare("UPDATE team_members SET role = 'admin', updated_at = ? WHERE team_id = ? AND user_id = ?")
         .run(now, team.id, auth.user.id);
+      // The team's vaults follow the team. Left on the previous owner, they
+      // would be cascaded away with that account if it were ever deleted.
+      await db.prepare('UPDATE vaults SET user_id = ?, updated_at = ? WHERE team_id = ?')
+        .run(body.userId, now, team.id);
       const vaults = await db.prepare("SELECT id FROM vaults WHERE team_id = ? AND kind = 'team'")
         .all<{ id: string }>(team.id);
       for (const vault of vaults) {

@@ -7,6 +7,7 @@ import { disableMfa, isMfaEnabled } from '../auth/mfa.js';
 import { getUserByEmail, requireAdmin, revokeAllSessions } from '../auth/sessions.js';
 import { resolveSmtp, sendMail, verifySmtp } from '../email/mailer.js';
 import { accountInviteEmail, testEmail } from '../email/templates.js';
+import { assertOwnsNoTeams, deleteAccount } from '../lib/accounts.js';
 import { audit, pruneAuditLog } from '../lib/audit.js';
 import { hashPassword, randomToken, sha256 } from '../lib/crypto.js';
 import { ApiError } from '../lib/errors.js';
@@ -20,7 +21,7 @@ import {
   writeSetting,
 } from '../lib/settings.js';
 import { vaultStorageBytes } from '../lib/vaults.js';
-import { publicUser } from './auth.js';
+import { invalidatePasswordResetTokens, publicUser } from './auth.js';
 import {
   clientIp,
   emailSchema,
@@ -203,9 +204,16 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     // access token happens to expire.
     if (body.disabled === true) await revokeAllSessions(db, id);
 
+    // Every field that changed is recorded. Marking an address verified or
+    // renaming an account changes what others see and trust, so it belongs in
+    // the trail as much as a role change does.
     await audit(db, auth.user.id, 'admin.user_update', `user:${id}`, {
       role: body.role ?? null,
       disabled: body.disabled ?? null,
+      disabledReason: body.disabled === true ? body.disabledReason ?? null : null,
+      emailVerified: body.emailVerified ?? null,
+      displayName: body.displayName !== undefined ? body.displayName?.trim() || null : null,
+      changed: Object.keys(body).filter((key) => body[key as keyof typeof body] !== undefined),
     }, clientIp(request));
     return publicUser((await db.prepare('SELECT * FROM users WHERE id = ?').get<UserRow>(id))!);
   });
@@ -235,6 +243,7 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
 
     await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(await hashPassword(body.newPassword), nowIso(), id);
+    await invalidatePasswordResetTokens(db, id);
     await revokeAllSessions(db, id);
     await audit(db, auth.user.id, 'admin.password_set', `user:${id}`, null, clientIp(request));
     return { updated: true };
@@ -269,10 +278,11 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     ) {
       throw new ApiError(409, 'last_admin', 'This is the only administrator on this server');
     }
+    await assertOwnsNoTeams(db, id);
     await audit(db, auth.user.id, 'admin.user_delete', `user:${id}`, {
       email: user.email,
     }, clientIp(request));
-    await db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    await deleteAccount(db, id);
     return reply.code(204).send();
   });
 
@@ -460,9 +470,17 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
         'Domain registration needs at least one allowed domain',
       );
     }
+    const previous = await readSetting(db, 'platform');
     await writeSetting(db, 'platform', body, auth.user.id);
     if (body.auditRetentionDays > 0) await pruneAuditLog(db, body.auditRetentionDays);
+    // Platform settings hold no secrets, so the changed keys and their new
+    // values are recorded in full. Turning email verification off or opening
+    // sign-up is exactly what an operator needs to find in the trail later.
+    const changed = (Object.keys(body) as (keyof typeof body)[])
+      .filter((key) => JSON.stringify(previous[key]) !== JSON.stringify(body[key]));
     await audit(db, auth.user.id, 'admin.settings_platform', null, {
+      changed,
+      values: Object.fromEntries(changed.map((key) => [key, body[key]])),
       registrationMode: body.registrationMode,
       maintenanceMode: body.maintenanceMode,
     }, clientIp(request));
