@@ -3,6 +3,10 @@ node_modules
 dist
 **/dist
 data
+backups
+coverage
+# Rebuilt inside the image; a stale local build must not leak in.
+server/public
 .git
 .github
 *.log
