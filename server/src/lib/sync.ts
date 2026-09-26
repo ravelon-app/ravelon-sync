@@ -22,7 +22,17 @@ export const SYNC_ITEM_TYPES = new Set([
   'IncidentCapsule',
 ]);
 
-export const SYNC_PULL_PAGE_SIZE = 100;
+/**
+ * A pull page is bounded twice: by rows, and by the ciphertext it carries.
+ *
+ * Both clients collect every page before applying anything, and every page
+ * counts against the per-user sync rate limit, so small pages made the first
+ * sync of a large vault run into 429 before it could finish. The byte budget
+ * keeps one page of large records from turning into a response of hundreds of
+ * megabytes.
+ */
+export const SYNC_PULL_PAGE_SIZE = 500;
+export const SYNC_PULL_PAGE_BYTES = 8 * 1024 * 1024;
 export const SYNC_PUSH_MAX_ITEMS = 500;
 
 export const syncItemSchema = z.object({
@@ -139,6 +149,11 @@ export function isUnchangedSyncItem(existing: ExistingSyncItemRow, item: SyncIte
     && existing.client_revision === item.clientRevision
     && existing.updated_at === item.updatedAt
     && (existing.deleted_at ?? null) === (item.deletedAt ?? null)
+    // Metadata alone is not identity: a record re-encrypted under the same
+    // revision and timestamp (a key rotation, a repaired client) must still be
+    // stored, or the server keeps serving the old ciphertext forever.
+    && existing.ciphertext === item.ciphertext
+    && existing.nonce === item.nonce
   );
 }
 

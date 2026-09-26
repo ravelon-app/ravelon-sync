@@ -73,6 +73,8 @@ const ERROR_MESSAGES: Record<string, TranslationKey> = {
   device_revoked: "error.sessionExpired",
   not_found: "error.notFound",
   admin_required: "error.forbidden",
+  personal_vault_required: "error.personalVaultRequired",
+  owns_teams: "error.ownsTeams",
 };
 
 export function describeError(error: unknown, t: (key: TranslationKey) => string): string {

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { scalar } from '../db/database.js';
 import { readSetting } from '../lib/settings.js';
-import type { RouteContext } from './context.js';
+import { emailVerificationRequired, type RouteContext } from './context.js';
 
 /**
  * Endpoints a Ravelon client and a container orchestrator both need.
@@ -66,7 +66,9 @@ export function registerHealthRoutes(app: FastifyInstance, context: RouteContext
       registrationOpen: accounts === 0 || platform.registrationMode === 'open',
       /** `domain` mode still shows the form; the domain list is public so the error is honest. */
       allowedEmailDomains: platform.registrationMode === 'domain' ? platform.allowedEmailDomains : [],
-      requireEmailVerification: platform.requireEmailVerification,
+      // The effective rule, not the raw switch: domain sign-up requires a
+      // confirmed address whatever the switch says.
+      requireEmailVerification: emailVerificationRequired(platform),
       maintenanceMode: platform.maintenanceMode,
       maintenanceMessage: platform.maintenanceMode ? platform.maintenanceMessage : '',
       passwordMinLength: 10,

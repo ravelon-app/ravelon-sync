@@ -1,5 +1,5 @@
 import { type Config, newId, nowIso } from '../config.js';
-import { type AppDatabase, scalar } from '../db/database.js';
+import { type AppDatabase, lockSection, scalar } from '../db/database.js';
 import { ApiError } from './errors.js';
 import type {
   TeamAccessRow,
@@ -68,7 +68,7 @@ export async function listAccessibleVaults(
      FROM vaults v
      JOIN vault_members vm ON vm.vault_id = v.id
      WHERE vm.user_id = ?
-     ORDER BY v.kind ASC, v.created_at ASC`,
+     ORDER BY v.kind ASC, v.created_at ASC, v.id ASC`,
   ).all<VaultAccessRow>(userId);
 }
 
@@ -127,19 +127,27 @@ export async function ensureVaultForClientId(
   const current = await getVaultAccess(db, userId, clientVaultId);
   if (current) return current;
 
-  const occupied = await db.prepare('SELECT id FROM vaults WHERE id = ?').get(clientVaultId);
-  if (occupied) throw new ApiError(403, 'vault_not_accessible', 'Vault not found or not accessible');
-
-  await assertVaultCreationAvailable(db, config, userId);
-  const now = nowIso();
+  // Check and insert run under one lock. Two first pushes from the same
+  // account arrive together often (two devices, or a retry), and without it
+  // both pass the checks: one then fails on the primary key, and the vault
+  // limit can be exceeded by racing requests.
   await db.transaction(async () => {
+    await lockSection(db, 'vault_create');
+    if (await getVaultAccess(db, userId, clientVaultId)) return;
+    const occupied = await db.prepare('SELECT id FROM vaults WHERE id = ?').get(clientVaultId);
+    if (occupied) throw new ApiError(403, 'vault_not_accessible', 'Vault not found or not accessible');
+
+    await assertVaultCreationAvailable(db, config, userId);
+    const now = nowIso();
     await db.prepare(
       `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
        VALUES (?, ?, 'Personal Vault', 'personal', NULL, ?, ?, ?)`,
     ).run(clientVaultId, userId, userId, now, now);
     await ensureVaultMember(db, clientVaultId, userId, 'owner');
   })();
-  return (await getVaultAccess(db, userId, clientVaultId))!;
+  const created = await getVaultAccess(db, userId, clientVaultId);
+  if (!created) throw new ApiError(403, 'vault_not_accessible', 'Vault not found or not accessible');
+  return created;
 }
 
 export async function assertVaultCreationAvailable(

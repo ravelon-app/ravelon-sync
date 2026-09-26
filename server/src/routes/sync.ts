@@ -8,6 +8,7 @@ import { audit } from '../lib/audit.js';
 import { ApiError } from '../lib/errors.js';
 import type { ExistingSyncItemRow, SyncItemRow } from '../lib/rows.js';
 import { readSetting } from '../lib/settings.js';
+import { MAX_SOCKETS_PER_USER } from '../lib/sync-events.js';
 import {
   compareRevision,
   encodedBytes,
@@ -15,6 +16,7 @@ import {
   isUnchangedSyncItem,
   nextCursor,
   publicSyncItem,
+  SYNC_PULL_PAGE_BYTES,
   SYNC_PULL_PAGE_SIZE,
   SYNC_PUSH_MAX_ITEMS,
   type SyncItemInput,
@@ -97,10 +99,10 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
           });
           continue;
         }
-        if (!existing && item.baseRevision !== undefined && item.baseRevision !== 0) {
-          results.push({ id: item.id, status: 'conflict', revision: 0 });
-          continue;
-        }
+        // No row but a non-zero base: the client last saw a copy this server
+        // no longer has, for example after a restore from an older backup.
+        // There is no newer version to protect, and a conflict without
+        // `current` is one no client can resolve, so it is stored instead.
 
         // Last-writer-wins path, for clients that send no baseRevision.
         if (
@@ -224,21 +226,44 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     }).parse(request.query);
 
     const vault = await requireVaultAccess(db, auth.user.id, query.vaultId);
-    const rows = await db.prepare(
-      `SELECT * FROM sync_items
-       WHERE vault_id = ? AND cursor > ?
+
+    // The head is read before the rows, and rows past it are left for the next
+    // pull. Every writer allocates cursors under one lock held until commit,
+    // so everything at or below a committed head is already visible. Reading
+    // the head afterwards instead could report a cursor for a record that
+    // committed between the two statements and was never sent.
+    const head = await vaultCursor(db, vault.id);
+    const window = await db.prepare(
+      `SELECT cursor, LENGTH(ciphertext) + LENGTH(nonce) AS size FROM sync_items
+       WHERE vault_id = ? AND cursor > ? AND cursor <= ?
        ORDER BY cursor ASC
        LIMIT ?`,
-    ).all<SyncItemRow>(vault.id, query.cursor, SYNC_PULL_PAGE_SIZE + 1);
+    ).all<{ cursor: number; size: number }>(vault.id, query.cursor, head, SYNC_PULL_PAGE_SIZE + 1);
 
-    const hasMore = rows.length > SYNC_PULL_PAGE_SIZE;
-    const page = rows.slice(0, SYNC_PULL_PAGE_SIZE);
-    // A partial page reports the last row's cursor so the next request
-    // continues from there; a final page reports the vault's head, which also
-    // carries the client past cursors spent on other vaults.
-    const cursor = hasMore && page.length
-      ? String(page[page.length - 1].cursor)
-      : String(await vaultCursor(db, vault.id));
+    let last = query.cursor;
+    let bytes = 0;
+    let taken = 0;
+    for (const row of window.slice(0, SYNC_PULL_PAGE_SIZE)) {
+      // At least one record per page, however large, or a single oversized
+      // record would stall the client on an empty page forever.
+      if (taken > 0 && bytes + Number(row.size) > SYNC_PULL_PAGE_BYTES) break;
+      bytes += Number(row.size);
+      taken += 1;
+      last = Number(row.cursor);
+    }
+    const hasMore = taken < window.length;
+    const page = taken === 0 ? [] : await db.prepare(
+      `SELECT * FROM sync_items
+       WHERE vault_id = ? AND cursor > ? AND cursor <= ?
+       ORDER BY cursor ASC`,
+    ).all<SyncItemRow>(vault.id, query.cursor, last);
+
+    // A partial page reports its last row so the next request continues from
+    // there; a final page reports the head read above, which also carries the
+    // client past cursors spent on other vaults. A head below the cursor the
+    // client sent means the database was restored from an older backup, and
+    // reporting it lets the client notice and pull from the start again.
+    const cursor = String(hasMore ? last : head);
 
     return { cursor, hasMore, items: page.map(publicSyncItem) };
   });
@@ -257,8 +282,35 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       const query = z.object({ vaultId: z.string().min(1).max(160) }).parse(request.query);
       const vault = await getVaultAccess(db, auth.user.id, query.vaultId);
       if (!vault) throw new ApiError(403, 'vault_not_accessible', 'Vault not found or not accessible');
+      if (syncEvents.socketsFor(auth.user.id) >= MAX_SOCKETS_PER_USER) {
+        // 1013 is "try again later": clients reconnect quietly instead of
+        // reporting a policy failure.
+        socket.close(1013, 'too_many_connections');
+        return;
+      }
 
-      syncEvents.subscribe(vault.id, socket);
+      const userId = auth.user.id;
+      const deviceId = auth.deviceId;
+      syncEvents.subscribe(vault.id, socket, {
+        userId,
+        // The access token is deliberately not re-verified here: it expires
+        // every few minutes and clients reconnect on their own schedule. What
+        // is re-checked is what an operator or owner can take away.
+        revalidate: async () => {
+          const user = await db.prepare('SELECT disabled FROM users WHERE id = ?')
+            .get<{ disabled: number }>(userId);
+          if (!user || user.disabled) return 'unauthorized';
+          const live = await db.prepare(
+            `SELECT rt.id FROM refresh_tokens rt
+             JOIN devices d ON d.id = rt.device_id
+             WHERE d.id = ? AND d.user_id = ? AND rt.revoked_at IS NULL AND rt.expires_at > ?
+             LIMIT 1`,
+          ).get(deviceId, userId, nowIso());
+          if (!live) return 'unauthorized';
+          if (!(await getVaultAccess(db, userId, vault.id))) return 'vault_not_accessible';
+          return null;
+        },
+      });
       // An immediate first message lets a client that reconnected after a
       // restart notice a cursor it missed without waiting for the next change.
       socket.send(JSON.stringify({
@@ -267,7 +319,7 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
         cursor: String(await vaultCursor(db, vault.id)),
       }));
     })().catch((error: unknown) => {
-      socket.close(1008, error instanceof ApiError ? error.code : 'sync_event_setup_failed');
+      socket.close(1008, socketCloseReason(error));
     });
   });
 
@@ -337,6 +389,20 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       updatedAt: row.updated_at,
     };
   });
+}
+
+/**
+ * The close reason a failed socket setup reports.
+ *
+ * Every authentication failure is reported as `unauthorized`, whatever the
+ * precise cause, because that is the reason clients recognise as "refresh the
+ * session and reconnect". A distinct `invalid_token` made the iOS client treat
+ * an ordinary expired token as a permanent refusal.
+ */
+export function socketCloseReason(error: unknown): string {
+  if (error instanceof ApiError) return error.status === 401 ? 'unauthorized' : error.code;
+  if (error instanceof z.ZodError) return 'validation_failed';
+  return 'sync_event_setup_failed';
 }
 
 /**
