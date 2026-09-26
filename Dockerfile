@@ -4,8 +4,11 @@
 # files the API serves itself, so there is no second image, no CORS to
 # configure and no API URL baked in at build time.
 
+# Node 24 is the Active LTS line. Stay on an LTS major: an odd-numbered or
+# not-yet-LTS "Current" release drops out of support within months.
+
 # --- build ------------------------------------------------------------------
-FROM node:26-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 
 # better-sqlite3 compiles a native module when no prebuilt binary matches the
@@ -29,7 +32,7 @@ RUN npm run build --workspace web \
 # A separate install rather than pruning the build tree: the result carries no
 # build tooling, and npm resolves it from the same lockfile, so it is exactly
 # reproducible.
-FROM node:26-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 
 RUN apt-get update \
@@ -45,10 +48,15 @@ RUN npm ci --omit=dev
 
 
 # --- runtime ----------------------------------------------------------------
-FROM node:26-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 
+# Reported by /v1/health and the admin interface. CI passes the release tag or
+# commit; a local build without it reports the server's built-in version.
+ARG RAVELON_SYNC_VERSION=""
+
 ENV NODE_ENV=production \
+    RAVELON_SYNC_VERSION=${RAVELON_SYNC_VERSION} \
     PORT=4100 \
     HOST=0.0.0.0 \
     DATABASE_FILE=/data/ravelon-sync.db \
@@ -66,7 +74,9 @@ COPY --from=build --chown=node:node /app/server/public  ./server/public
 COPY --from=build --chown=node:node /app/server/package.json ./server/package.json
 COPY --from=build --chown=node:node /app/package.json   ./package.json
 
-# Never root. The database lives in a volume this user owns.
+# Never root. The database lives in a volume this user owns. `node` is uid and
+# gid 1000 in the official image; a bind mount instead of the named volume has
+# to be writable by that uid (see docs/INSTALLATION.md).
 USER node
 VOLUME ["/data"]
 EXPOSE 4100

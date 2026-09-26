@@ -21,9 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22 is the floor package.json advertises, 26 is what the image ships.
-        # Testing both keeps the engines field honest instead of aspirational.
-        node: ["22", "26"]
+        # 22 is the floor package.json advertises, 24 is the LTS the image
+        # ships, and 26 is the current line the next image will move to.
+        # Testing all three keeps the engines field honest instead of
+        # aspirational.
+        node: ["22", "24", "26"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,3 +87,51 @@ jobs:
           # here: a 404 is the expected answer, and -f would make curl itself
           # exit non-zero for it.
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4199/v1/nope)" = "404"
+
+  postgres:
+    # Every other test runs on in-memory SQLite, which serializes transactions
+    # on one connection. PostgreSQL serves them from a pool, so placeholder
+    # rewriting, BIGINT parsing, rollback and the advisory locks behind the
+    # quota and bootstrap checks are only exercised here.
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The major compose.postgres.yaml ships.
+        postgres: ["17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_USER: ravelon
+          POSTGRES_PASSWORD: ravelon-ci
+          POSTGRES_DB: ravelon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ravelon -d ravelon_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Server tests against PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgresql://ravelon:ravelon-ci@127.0.0.1:5432/ravelon_test
+          # Turns a missing TEST_DATABASE_URL into a failure instead of a skip.
+          REQUIRE_TEST_DATABASE: "1"
+        run: npm run test --workspace server

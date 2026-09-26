@@ -6,7 +6,7 @@ import type { AppDatabase } from '../db/database.js';
 import { ApiError } from '../lib/errors.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
 import type { SyncEventHub } from '../lib/sync-events.js';
-import { readSetting } from '../lib/settings.js';
+import { type PlatformSettings, readSetting } from '../lib/settings.js';
 
 export interface RouteContext {
   db: AppDatabase;
@@ -22,22 +22,16 @@ export function clientIp(request: FastifyRequest): string {
 /**
  * The origin to put into a link a person will click.
  *
- * PUBLIC_URL wins when set. Otherwise the request's own origin is used, which
- * is right for the common single-origin deployment and keeps a fresh install
- * working before anything is configured.
+ * PUBLIC_URL wins, and production refuses to start without it. Outside
+ * production the origin comes from Fastify's `protocol` and `host`, which only
+ * read X-Forwarded-Proto and X-Forwarded-Host from a peer in
+ * TRUSTED_PROXY_IPS. Reading those headers directly would let anyone point a
+ * password-reset link at a host of their choosing.
  */
 export function publicOrigin(config: Config, request: FastifyRequest): string {
   if (config.publicUrl) return config.publicUrl;
-  const forwardedProto = firstHeaderValue(request.headers['x-forwarded-proto']);
-  const forwardedHost = firstHeaderValue(request.headers['x-forwarded-host']);
-  const protocol = forwardedProto || request.protocol;
-  const host = forwardedHost || request.headers.host;
-  return host ? `${protocol}://${host}` : '';
-}
-
-function firstHeaderValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0]?.split(',')[0]?.trim() ?? '';
-  return value?.split(',')[0]?.trim() ?? '';
+  const host = request.host;
+  return host ? `${request.protocol}://${host}` : '';
 }
 
 export const emailSchema = z.string().trim().max(254).toLowerCase().pipe(z.email());
@@ -79,14 +73,26 @@ export async function assertNotInMaintenance(context: RouteContext): Promise<voi
 }
 
 /**
+ * Whether this deployment needs a confirmed address before an account syncs.
+ *
+ * `domain` sign-up admits anyone who types an address at an allowed domain.
+ * Without proof they can read mail there, anyone could register
+ * someone@corp.example and sync as a colleague, so that mode always requires
+ * the address to be confirmed.
+ */
+export function emailVerificationRequired(platform: PlatformSettings): boolean {
+  return platform.requireEmailVerification || platform.registrationMode === 'domain';
+}
+
+/**
  * Gate for every sync and vault endpoint.
  *
  * A self-hosted deployment has no subscription to check, so the only condition
- * is whether the operator requires a verified email address.
+ * is whether a verified email address is required.
  */
 export async function assertCanSync(context: RouteContext, userEmailVerified: boolean): Promise<void> {
   const platform = await readSetting(context.db, 'platform');
-  if (platform.requireEmailVerification && !userEmailVerified) {
+  if (emailVerificationRequired(platform) && !userEmailVerified) {
     throw new ApiError(
       403,
       'email_verification_required',

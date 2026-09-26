@@ -41,6 +41,9 @@ export function Vaults() {
   const [deleting, setDeleting] = useState<Vault | null>(null);
 
   const list = vaults.data?.vaults ?? [];
+  // The server lists personal vaults oldest first; the first one holds the
+  // account key envelope and refuses deletion, so it offers no delete button.
+  const primaryPersonalId = list.find((vault) => vault.kind === "personal" && vault.role === "owner")?.id;
 
   return (
     <>
@@ -82,6 +85,9 @@ export function Vaults() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-fg">{vault.name}</span>
                           <span className="mt-0.5 block font-mono text-[11px] text-fg3">{vault.id}</span>
+                          {vault.id === primaryPersonalId ? (
+                            <span className="mt-0.5 block text-xs text-fg3">{t("vaults.primaryHint")}</span>
+                          ) : null}
                         </span>
                         <Badge tone={vault.kind === "team" ? "accent" : "neutral"}>
                           {vault.kind === "team" ? t("vaults.team") : t("vaults.personal")}
@@ -106,7 +112,7 @@ export function Vaults() {
                         >
                           {t("vaults.members")}
                         </Button>
-                        {vault.role === "owner" ? (
+                        {vault.role === "owner" && vault.id !== primaryPersonalId ? (
                           <Button
                             size="sm"
                             variant="ghost"

@@ -255,12 +255,13 @@ export async function lockSection(db: AppDatabase, name: LockName): Promise<void
   await db.prepare('SELECT pg_advisory_xact_lock(?)').get(LOCK_IDS[name]);
 }
 
-export type LockName = 'user_bootstrap' | 'vault_storage';
+export type LockName = 'user_bootstrap' | 'vault_storage' | 'vault_create';
 
 /** Arbitrary but fixed. Two different sections must never share a number. */
 const LOCK_IDS: Record<LockName, number> = {
   user_bootstrap: 1_882_037_101,
   vault_storage: 1_882_037_102,
+  vault_create: 1_882_037_103,
 };
 
 /** Reads a single numeric aggregate, normalizing SQLite and PostgreSQL types. */

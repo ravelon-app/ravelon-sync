@@ -63,8 +63,11 @@ server at all.
 
 **Timing.** An unknown email address is verified against a fixed dummy hash, so
 sign-in takes the same time whether or not the account exists. Password reset
-requests answer identically either way. Neither endpoint can be used to
-enumerate who has an account here.
+requests answer identically either way, and do not wait for the mail server,
+so the response time does not differ either. Registration checks the sign-up
+policy before it checks for an existing account, so an invite-only or closed
+server does not confirm addresses to strangers. None of these endpoints can be
+used to enumerate who has an account here.
 
 **Access tokens.** HS256, 15 minutes by default, carrying the account, role and
 device. Every authenticated request re-checks the database: a token stays
@@ -87,7 +90,19 @@ a stolen table cannot be brute-forced without the key.
 **Re-authentication.** Turning off two-factor, replacing recovery codes,
 deleting an account and approving a new device all require the password again,
 and a current code where one is enrolled. A found unlocked session is not
-enough to take an account over.
+enough to take an account over. Changing the password also needs the current
+password and shares the same per-account lockout; a code is checked when sent
+but not yet required, because the desktop and iOS clients do not send one yet.
+A password change or reset spends every outstanding reset link.
+
+**Two-factor lockout.** Wrong codes count per sign-in challenge and per
+account. Starting a new sign-in does not reset the account's count, so a
+known password does not buy unlimited guesses at the second factor.
+
+**Links in email.** Reset, invitation and pairing links are built from
+`PUBLIC_URL`, which production requires. Without it (development only) the
+origin comes from the request as Fastify sees it, which honours
+`X-Forwarded-Host` and `X-Forwarded-Proto` only from `TRUSTED_PROXY_IPS`.
 
 ## Access control
 
@@ -103,6 +118,15 @@ credentials the person actually used.
 The last administrator cannot be demoted, disabled or deleted. Locking yourself
 out of a server you own is not a recoverable state.
 
+An account that owns a team cannot be deleted, by itself or by an
+administrator, until ownership is transferred. Deleting it would otherwise take
+the team and every member's shared vaults with it. Team vaults move to the new
+owner on transfer, and a deleted team administrator's vaults stay with the team.
+
+Under the `domain` sign-up policy an account syncs only after confirming its
+address. Anyone can type an address at an allowed domain; only the mailbox
+owner can confirm it.
+
 ## Rate limiting
 
 Per-IP limits on authentication routes, per-account lockout after repeated
@@ -117,13 +141,19 @@ any client set `X-Forwarded-For` and walk past every per-IP limit.
 ## Transport
 
 Ravelon clients refuse anything but HTTPS, except on `127.0.0.1`. Run a reverse
-proxy that terminates TLS. The server sets `no-store`, `nosniff`,
-`no-referrer` and `DENY` framing on every response.
+proxy that terminates TLS. The server sets a Content Security Policy that only
+allows same-origin scripts, styles, fonts and connections (no inline script,
+no plugins, no framing), `nosniff`, `no-referrer`, `DENY` framing, a
+restrictive `Permissions-Policy` and `Cross-Origin-Opener-Policy` on every
+response, and HSTS on requests that arrived over HTTPS. API responses are
+`no-store`; hashed interface assets are cached as immutable.
 
 ## Audit
 
-Registration, sign-in, two-factor changes, password changes, invitations, role
-changes, vault and team lifecycle, and administrator actions are logged with
+Registration, sign-in, failed sign-ins and second-factor codes, replayed
+refresh tokens, two-factor changes, password changes, invitations, role
+changes, vault and team lifecycle, and administrator actions (including every
+changed platform setting and account field) are logged with
 actor, target, IP and timestamp. Detail fields carry counts and identifiers,
 never ciphertext, tokens or password material. Retention is configurable and
 defaults to a year.

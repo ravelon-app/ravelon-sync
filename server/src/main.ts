@@ -26,22 +26,26 @@ async function main(): Promise<void> {
 
   // Housekeeping the deployment would otherwise accumulate forever. Daily is
   // often enough for retention that is measured in months.
-  const dailyCleanup = setInterval(() => {
-    void (async () => {
-      try {
-        const platform = await readSetting(db, 'platform');
-        await pruneAuditLog(db, platform.auditRetentionDays);
-        const now = new Date().toISOString();
-        await db.prepare('DELETE FROM refresh_tokens WHERE expires_at < ?').run(now);
-        await db.prepare('DELETE FROM password_reset_tokens WHERE expires_at < ?').run(now);
-        await db.prepare('DELETE FROM email_verifications WHERE expires_at < ?').run(now);
-        await db.prepare('DELETE FROM mfa_challenges WHERE expires_at < ?').run(now);
-        await db.prepare('DELETE FROM desktop_auth_requests WHERE expires_at < ?').run(now);
-      } catch (error) {
-        app.log.warn({ err: error }, 'scheduled cleanup failed');
-      }
-    })();
-  }, 24 * 60 * 60 * 1000);
+  const cleanup = async () => {
+    try {
+      const platform = await readSetting(db, 'platform');
+      await pruneAuditLog(db, platform.auditRetentionDays);
+      const now = new Date().toISOString();
+      await db.prepare('DELETE FROM refresh_tokens WHERE expires_at < ?').run(now);
+      await db.prepare('DELETE FROM password_reset_tokens WHERE expires_at < ?').run(now);
+      await db.prepare('DELETE FROM email_verifications WHERE expires_at < ?').run(now);
+      await db.prepare('DELETE FROM mfa_challenges WHERE expires_at < ?').run(now);
+      await db.prepare('DELETE FROM desktop_auth_requests WHERE expires_at < ?').run(now);
+    } catch (error) {
+      app.log.warn({ err: error }, 'scheduled cleanup failed');
+    }
+  };
+  // Also once shortly after boot: a server that is restarted more often than
+  // daily, by updates or a container scheduler, would otherwise never reach
+  // the interval and keep expired tokens and old audit lines indefinitely.
+  const startupCleanup = setTimeout(() => void cleanup(), 60 * 1000);
+  startupCleanup.unref();
+  const dailyCleanup = setInterval(() => void cleanup(), 24 * 60 * 60 * 1000);
   dailyCleanup.unref();
 
   let shuttingDown = false;
@@ -50,6 +54,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     app.log.info({ signal }, 'shutting down');
     void (async () => {
+      clearTimeout(startupCleanup);
       clearInterval(dailyCleanup);
       syncEvents.close();
       try {

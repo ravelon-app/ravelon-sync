@@ -49,6 +49,29 @@ docker compose up -d
 docker compose logs -f sync
 ```
 
+The compose files pass every setting from `.env.example` into the container.
+Two are fixed on purpose: `DATABASE_FILE` is `/data/ravelon-sync.db` inside
+the `sync_data` volume, and `HOST`/`PORT` inside the container stay
+`0.0.0.0:4100` (`PORT` in `.env` changes the published host port). A variable
+you add yourself reaches the server only if the compose file lists it; check
+with `docker compose config`.
+
+### Where the data lives
+
+The database sits in the named volume `sync_data`, which Docker creates owned
+by the image's user. The server runs as `node`, uid and gid 1000, never as
+root. If you replace the volume with a host directory, that directory must be
+writable by uid 1000, or the server exits on its first write:
+
+```yaml
+    volumes:
+      - ./data:/data
+```
+
+```bash
+mkdir -p data && sudo chown 1000:1000 data && chmod 700 data
+```
+
 The container binds to `127.0.0.1:4100` by default, because the reverse proxy
 is what should face the internet.
 
@@ -114,21 +137,43 @@ labels:
   - traefik.http.services.ravelon-sync.loadbalancer.server.port=4100
 ```
 
-Then tell the server which address to trust:
+### Tell the server which proxy to trust
 
-```dotenv
-TRUSTED_PROXY_IPS=127.0.0.1
-```
+This step is easy to get wrong with Docker. The server trusts forwarded client
+addresses only from `TRUSTED_PROXY_IPS`, and it sees the address the
+connection arrives from *inside the container*, which is rarely `127.0.0.1`:
 
-Use the proxy's actual address. In Docker that is usually the gateway of the
-bridge network, not `127.0.0.1`. Getting this wrong in the permissive
-direction is worse than leaving it empty: an unlisted proxy just means rate
-limits count the proxy instead of the client, while trusting everything lets
-any client forge its own address.
+| Where the proxy runs | Address the server sees |
+| --- | --- |
+| On the host, reaching the published port (Caddy or nginx above) | The gateway of the compose network, such as `172.18.0.1` |
+| In another container on the same compose network | That container's address |
+| Without Docker, on the same machine | `127.0.0.1` |
+
+Find the gateway of the compose network:
 
 ```bash
-docker compose restart sync
+docker network inspect ravelon-sync_default \
+  --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+# compose.postgres.yaml: ravelon-sync_backend
 ```
+
+or read `remoteAddress` from a request in `docker compose logs sync`. Then:
+
+```dotenv
+TRUSTED_PROXY_IPS=172.18.0.1
+```
+
+List exact addresses, not the whole Docker range. Getting this wrong in the
+permissive direction is worse than leaving it empty: an unlisted proxy just
+means rate limits count the proxy instead of the client, while trusting
+everything lets any client forge its own address.
+
+```bash
+docker compose up -d
+```
+
+(`up -d` recreates the container with the new value; `restart` would keep the
+old environment.)
 
 ## 5. Create the administrator
 
@@ -193,6 +238,28 @@ docker compose -f compose.postgres.yaml up -d
 
 Migrations take an advisory lock at startup, so several replicas cannot race
 through the same schema change.
+
+`compose.postgres.yaml` hands the password to the server separately from the
+connection URL, so `POSTGRES_PASSWORD` may contain any character. Put it in
+single quotes in `.env` if it contains `$` or a space.
+
+To use a PostgreSQL server you already run, set `DATABASE_URL` in `.env`
+(with `compose.yaml`, or without Docker). It is a URL, so reserved characters
+in the user name or password must be percent-encoded: `@` becomes `%40`, `:`
+`%3A`, `/` `%2F`, `#` `%23`, `%` `%25`. Unencoded, a password like `p@ss:word`
+silently turns into a different host or user.
+
+```bash
+node -e 'console.log(encodeURIComponent(process.argv[1]))' 'p@ss:word/#1'
+# p%40ss%3Aword%2F%231
+```
+
+```dotenv
+DATABASE_URL=postgresql://ravelon:p%40ss%3Aword%2F%231@db.internal:5432/ravelon_sync
+```
+
+Without Docker you can instead leave the password out of the URL and set
+`PGPASSWORD`, which the PostgreSQL client reads when the URL carries none.
 
 ## Upgrading
 

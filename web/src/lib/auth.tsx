@@ -14,6 +14,7 @@ import {
   ApiError,
   clearSession,
   getSession,
+  onSessionChange,
   refreshSession,
   signOut as apiSignOut,
   storedRefreshToken,
@@ -98,6 +99,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error;
     }
   }, []);
+
+  // A session can end outside this component: another tab signing out, or a
+  // refresh the server refused. The interface follows instead of showing an
+  // account whose requests will all fail.
+  useEffect(
+    () =>
+      onSessionChange((next) => {
+        if (!next) setAccount(null);
+      }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;

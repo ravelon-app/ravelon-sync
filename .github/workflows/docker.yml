@@ -34,6 +34,18 @@ jobs:
           repo="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           echo "name=${{ env.REGISTRY }}/${repo}" >> "$GITHUB_OUTPUT"
 
+      # Reported by /v1/health and the admin interface. A release reports its
+      # tag; anything else the package version plus the commit it came from.
+      - name: Version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(jq -r .version package.json)+sha.${GITHUB_SHA::7}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -72,6 +84,8 @@ jobs:
           push: false
           load: true
           tags: ravelon-sync:pr
+          build-args: |
+            RAVELON_SYNC_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha,scope=sync
           cache-to: type=gha,mode=max,scope=sync
 
@@ -84,6 +98,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            RAVELON_SYNC_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha,scope=sync
           cache-to: type=gha,mode=max,scope=sync
           # Self-hosters pull this with `docker compose pull`, and an
@@ -116,11 +132,21 @@ jobs:
           # the root. A missing module only shows up when the image actually
           # serves a request, so the check has to go through the API.
           curl -fsS http://127.0.0.1:4198/v1/health | grep -q '"service":"ravelon-sync"'
+          curl -fsS http://127.0.0.1:4198/v1/health \
+            | grep -qF '"version":"${{ steps.version.outputs.version }}"'
           curl -fsS http://127.0.0.1:4198/v1/public-config | grep -q '"needsSetup":true'
           curl -fsS http://127.0.0.1:4198/ | grep -q '<div id="root">'
 
           # The container must not be running as root.
           test "$(docker exec ravelon-sync-ci id -u)" != "0"
+
+          # Docker's own health check must reach /healthz, not just exist.
+          for attempt in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' ravelon-sync-ci)"
+            [ "$status" = "starting" ] || break
+            sleep 1
+          done
+          test "$status" = "healthy"
 
           docker logs ravelon-sync-ci
           docker rm -f ravelon-sync-ci

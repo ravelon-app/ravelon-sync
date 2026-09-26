@@ -131,7 +131,7 @@ export function Security() {
         onClose={() => setRegenerating(false)}
         title={t("security.recoveryRegenerate")}
         description={t("security.recoveryBody")}
-        requireMfa={false}
+        requireMfa
         submitLabel={t("security.recoveryRegenerate")}
         onSubmit={async (body) => {
           const result = await api.post<{ recoveryCodes: string[] }>(

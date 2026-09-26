@@ -91,11 +91,17 @@ one before using it.
 | Route | Purpose |
 | --- | --- |
 | `POST /v1/auth/logout` | Revokes the device's sessions |
-| `POST /v1/auth/password/change` | Signs every other device out |
-| `POST /v1/auth/password/reset/request` | Always answers identically |
-| `POST /v1/auth/password/reset/confirm` | Revokes every session |
+| `POST /v1/auth/password/change` | Signs every other device out; spends open reset links |
+| `POST /v1/auth/password/reset/request` | Always answers identically, without waiting for mail |
+| `POST /v1/auth/password/reset/confirm` | Revokes every session; spends other reset links |
 | `POST /v1/auth/verify-email/request` | Sends a confirmation link |
 | `POST /v1/auth/verify-email/confirm` | Confirms an address |
+
+`password/change` takes `{ "currentPassword", "newPassword", "mfaCode"? }`. A
+wrong current password answers `400 invalid_credentials`, not 401, so a client
+does not mistake it for an expired access token. It shares the account's
+reauthentication lockout, and a sent `mfaCode` is checked; it is not yet
+required, because current desktop and iOS clients do not send one.
 
 ## Session shape
 
@@ -131,8 +137,8 @@ client to edit VNC security settings.
       "id": "host-1",
       "vaultId": "personal-vault",
       "itemType": "Host",
-      "ciphertext": "b64:opaque-client-ciphertext",
-      "nonce": "b64:xchacha20-poly1305-nonce",
+      "ciphertext": "opaque-client-ciphertext-in-base64",
+      "nonce": "base64-nonce",
       "schemaVersion": 1,
       "clientRevision": 4,
       "baseRevision": 12,
@@ -166,6 +172,17 @@ other 499:
 A `conflict` carries `current`, the server's version, because the client cannot
 merge without it and the server cannot merge at all.
 
+A push whose `baseRevision` names a record the server does not have (typically
+after the database was restored from an older backup) is stored rather than
+answered with a conflict: there is no newer copy to protect, and a conflict
+without `current` is one no client can resolve.
+
+`unchanged` requires the same ciphertext and nonce as well as the same
+metadata, so a record re-encrypted under its old revision is still stored.
+
+Current Ravelon clients encrypt with AES-256-GCM and send standard base64. The
+server does not care which scheme a client uses; it only refuses plaintext.
+
 `baseRevision` is optional. Present, it is a compare-and-swap. Absent, the
 push falls back to last-writer-wins, which is what older clients rely on.
 
@@ -178,9 +195,15 @@ JSON, gets `400 plaintext_sync_payload`.
 { "cursor": "142", "hasMore": false, "items": [ … ] }
 ```
 
-Up to 100 records per page, oldest first. Deletes come back as tombstones with
-`deletedAt` set rather than as gaps, so a client that was offline learns about
-them instead of resurrecting the record. Keep pulling while `hasMore`.
+Up to 500 records or about 8 MiB of ciphertext per page, whichever comes first,
+oldest first (a single larger record still gets a page of its own). Deletes
+come back as tombstones with `deletedAt` set rather than as gaps, so a client
+that was offline learns about them instead of resurrecting the record. Keep
+pulling while `hasMore`.
+
+A partial page reports its last record's cursor. The final page reports the
+vault's head. A head lower than the cursor the client sent means the server was
+restored from an older backup; the client should pull again from `0`.
 
 ### `GET /v1/sync/events?vaultId=` (WebSocket)
 
@@ -190,6 +213,17 @@ them instead of resurrecting the record. Keep pulling while `hasMore`.
 
 Only that. No record data crosses this socket. One message is sent on connect
 so a client that reconnected after a restart notices a cursor it missed.
+
+Every 25 seconds the server pings each socket, which keeps reverse proxies from
+cutting a quiet connection, and checks again that the device is still signed
+in and still a member of the vault. Close codes:
+
+| Code | Reason | Meaning |
+| --- | --- | --- |
+| `1008` | `unauthorized` | Token missing, invalid or expired, or the device was signed out. Refresh the session and reconnect. |
+| `1008` | `vault_not_accessible` | No access to this vault, or access was removed. |
+| `1008` | `email_verification_required` | The operator requires a confirmed address. |
+| `1013` | `too_many_connections` | More than 32 sockets for one account. Reconnect later. |
 
 ### Vault key material
 
@@ -212,7 +246,7 @@ an unwrapped secret is refused with `raw_vault_key_material`.
 | `GET /v1/vaults` | Vaults you can reach, with counts and storage |
 | `POST /v1/vaults` | Create one |
 | `PATCH /v1/vaults/:id` | Rename |
-| `DELETE /v1/vaults/:id` | Delete, with its records |
+| `DELETE /v1/vaults/:id` | Delete, with its records. The first personal vault holds the account key envelope and is refused with `409 personal_vault_required`. |
 | `GET /v1/vaults/:id/members` | Who has access |
 | `PATCH /v1/vaults/:id/members/:userId` | Change a role |
 | `GET /v1/vaults/:id/items/:itemId/versions` | Version metadata |
@@ -229,7 +263,9 @@ above. Team roles: `owner`, `admin`, `member`.
 
 Restoring copies the stored blob *forward* as a new revision rather than
 winding the cursor back, so every device pulls the restored state instead of
-quietly disagreeing about history.
+quietly disagreeing about history. Its client revision is raised above the copy
+it replaces, so a device still holding that copy cannot overwrite the restore
+by last writer wins.
 
 ## Device pairing
 
@@ -240,18 +276,29 @@ For a client with no comfortable way to type a password.
 2. The person opens `verificationUrl` in a signed-in browser and confirms the
    `userCode` matches, plus their password and second factor
 3. The client polls `POST /v1/desktop-auth/exchange` with `{ requestId, pollToken }`
-   — `202 pending` until approval, then a session
+   — `202 pending` until approval, then a session with `user` (the same shape
+   as `/v1/account/me`), `entitlements` and `vaults`
 
 Single-use, ten-minute expiry. Approval re-checks the password because it hands
-a full session to a device that has not authenticated at all.
+a full session to a device that has not authenticated at all. Wrong passwords
+and codes count toward the account lockout, after which approval answers
+`429 too_many_attempts` until it expires.
 
 ## Legacy snapshots
 
 `GET`/`PUT /v1/desktop/vault`, `GET /v1/desktop/vault/status`, and
-`GET /v1/desktop/vault/watch?vaultId=&afterVersion=` for clients older than the
-granular protocol. `watch` is a long poll: it holds up to 50 seconds and
-returns as soon as the vault changes, or immediately if the caller is already
-behind. Uploads are compare-and-swap on `baseVersion`.
+`GET /v1/desktop/vault/watch?vaultId=&afterVersion=&afterCursor=` for clients
+older than the granular protocol, and as a fallback when a WebSocket cannot be
+held. Uploads are compare-and-swap on `baseVersion`.
+
+`status` and `watch` answer `{ vaultId, exists, version, updatedAt, cursor }`,
+where `cursor` is the vault's granular head as a string.
+
+`watch` is a long poll: it holds up to 25 seconds and returns as soon as the
+vault changes, or immediately if the caller is already behind. With
+`afterCursor` the granular cursor decides whether the caller is behind; without
+it the legacy snapshot `version` does. An account holds at most 16 of these
+open at once; further ones answer immediately.
 
 ## Account and devices
 
@@ -260,15 +307,17 @@ behind. Uploads are compare-and-swap on `baseVersion`.
 | `GET /v1/account/me` | Account, entitlements, vaults |
 | `PATCH /v1/account` | Display name |
 | `GET /v1/account/export` | Everything held about you, records included |
-| `DELETE /v1/account` | Permanent; needs the password again |
+| `DELETE /v1/account` | Permanent; needs the password again, `409 owns_teams` while it owns a team |
 | `GET /v1/account/mfa` | Two-factor status |
 | `POST /v1/account/mfa/totp/setup` | Start enrolment; needs the password |
 | `POST /v1/account/mfa/totp/confirm` | Finish; returns recovery codes once |
+| `POST /v1/account/mfa/recovery-codes` | Replace recovery codes; needs the password and a code |
 | `GET /v1/devices` | Signed-in devices |
 | `DELETE /v1/devices/:id` | Sign one out |
 
 `entitlements.canSync` exists because Ravelon clients read it. Here it is true
-unless the operator requires a confirmed email address.
+unless a confirmed email address is required: when the operator turns that on,
+and always under the `domain` sign-up policy.
 
 ## Administration
 
@@ -281,6 +330,7 @@ Every route needs `role=admin` and answers `403 admin_required` otherwise.
 | `PATCH /v1/admin/users/:id` | Role, disable, verification |
 | `POST /v1/admin/users/:id/password` | Set a password directly |
 | `DELETE /v1/admin/users/:id/mfa` | Clear a lost second factor |
+| `DELETE /v1/admin/users/:id` | Delete an account; `409 owns_teams` while it owns a team |
 | `POST /v1/admin/invites` | Issue an invitation |
 | `GET /v1/admin/vaults` | Metadata only, never ciphertext |
 | `GET /v1/admin/audit` | Filterable audit log |

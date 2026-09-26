@@ -40,13 +40,34 @@ services:
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set SETTINGS_ENCRYPTION_KEY in .env}
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ravelon}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ravelon_sync}
+      # The password travels separately in PGPASSWORD, which the PostgreSQL
+      # client reads when the URL carries none. Interpolated into the URL, a
+      # password containing @, :, / or # would break the connection string.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ravelon}@postgres:5432/${POSTGRES_DB:-ravelon_sync}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-Ravelon Sync <sync@localhost>}
+
+      # Every other setting .env.example documents. Compose only hands a
+      # container what is listed here, so a value missing from this block
+      # would be silently ignored.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Unset keeps the bundled interface; an empty value means API only.
+      WEB_ROOT: ${WEB_ROOT-/app/server/public}
+      VAULT_STORAGE_LIMIT_MB: ${VAULT_STORAGE_LIMIT_MB:-256}
+      VAULTS_PER_USER: ${VAULTS_PER_USER:-50}
+      ACCESS_TOKEN_TTL_SEC: ${ACCESS_TOKEN_TTL_SEC:-900}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-60}
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-false}
+      RATE_LIMIT_AUTH_PER_IP: ${RATE_LIMIT_AUTH_PER_IP:-30}
+      RATE_LIMIT_AUTH_FAILURES: ${RATE_LIMIT_AUTH_FAILURES:-10}
+      RATE_LIMIT_SYNC_PER_USER: ${RATE_LIMIT_SYNC_PER_USER:-240}
+      RATE_LIMIT_API_PER_USER: ${RATE_LIMIT_API_PER_USER:-600}
     depends_on:
       postgres:
         condition: service_healthy

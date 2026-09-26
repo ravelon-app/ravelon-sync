@@ -27,8 +27,9 @@ export interface Config {
   refreshTokenTtlDays: number;
   /**
    * Public origin this deployment is reached at. Used for invite links,
-   * password-reset links and the desktop pairing URL. Empty means the server
-   * derives it per request, which is correct for a single-origin deployment.
+   * password-reset links and the desktop pairing URL. Required in production.
+   * Empty (development and tests only) derives it per request from Fastify's
+   * view of the request, which honours TRUSTED_PROXY_IPS.
    */
   publicUrl: string;
   /**
@@ -81,6 +82,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const settingsEncryptionKey = optionalSecret(env.SETTINGS_ENCRYPTION_KEY, 'SETTINGS_ENCRYPTION_KEY', production)
     ?? mfaEncryptionKey;
 
+  const publicUrl = normalizeOrigin(env.PUBLIC_URL, 'PUBLIC_URL');
+  // Reset, invitation and pairing links are built from this. Without a fixed
+  // origin they would come from request headers, and a forged Host header on a
+  // reset request would mail the victim a link to the attacker's server.
+  if (production && !publicUrl) {
+    throw new ConfigError(
+      'PUBLIC_URL is required in production. Set it to the origin people reach this server at, '
+      + 'such as https://sync.example.com',
+    );
+  }
+
   return {
     version: env.RAVELON_SYNC_VERSION?.trim() || '1.0.0',
     nodeEnv,
@@ -94,7 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     settingsEncryptionKey,
     accessTokenTtlSec: integer(env.ACCESS_TOKEN_TTL_SEC, 15 * 60),
     refreshTokenTtlDays: integer(env.REFRESH_TOKEN_TTL_DAYS, 60),
-    publicUrl: normalizeOrigin(env.PUBLIC_URL, 'PUBLIC_URL'),
+    publicUrl,
     corsOrigins: list(env.CORS_ORIGINS).map((origin) => normalizeOrigin(origin, 'CORS_ORIGINS')),
     webRoot: env.WEB_ROOT === '' ? '' : path.resolve(env.WEB_ROOT?.trim() || 'public'),
     smtp: {

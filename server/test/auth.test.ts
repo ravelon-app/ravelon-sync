@@ -34,11 +34,28 @@ describe('authentication', () => {
   });
 
   test('a duplicate email is refused', async () => {
+    // On an invite-only server the policy answers first, so the address is
+    // not confirmed to anyone without an invitation.
+    const refused = await api(server, 'POST', '/v1/auth/register', {
+      body: { email: 'admin@example.com', password: 'correct-horse-battery-staple' },
+    });
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.error.code, 'invite_required');
+
+    const admin = await login(server, 'admin@example.com', 'correct-horse-battery-staple');
+    await api(server, 'PUT', '/v1/admin/settings/platform', {
+      token: admin.body.accessToken,
+      body: { serverName: 'Test Server', registrationMode: 'open' },
+    });
     const response = await api(server, 'POST', '/v1/auth/register', {
       body: { email: 'admin@example.com', password: 'correct-horse-battery-staple' },
     });
     assert.equal(response.status, 409);
     assert.equal(response.body.error.code, 'account_exists');
+    await api(server, 'PUT', '/v1/admin/settings/platform', {
+      token: admin.body.accessToken,
+      body: { serverName: 'Test Server', registrationMode: 'invite' },
+    });
   });
 
   test('a short password is refused', async () => {
@@ -220,7 +237,8 @@ describe('registration modes', () => {
     const reuse = await api(server, 'POST', '/v1/auth/register', {
       body: { email: 'invited@example.com', password: 'correct-horse-battery-staple', inviteToken: token },
     });
-    assert.equal(reuse.status, 409);
+    assert.equal(reuse.status, 403);
+    assert.equal(reuse.body.error.code, 'invite_invalid');
     await server.close();
   });
 

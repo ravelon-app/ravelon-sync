@@ -10,11 +10,11 @@ import {
   isMfaEnabled,
   regenerateRecoveryCodes,
   startTotpEnrollment,
-  verifySecondFactor,
 } from '../auth/mfa.js';
 import { generateTotpSecret, totpUri } from '../auth/totp.js';
+import { verifyReauth } from '../auth/reauth.js';
 import { requireAuth, revokeAllSessions } from '../auth/sessions.js';
-import { verifyPassword } from '../lib/crypto.js';
+import { assertOwnsNoTeams, deleteAccount } from '../lib/accounts.js';
 import { audit } from '../lib/audit.js';
 import { ApiError } from '../lib/errors.js';
 import type { DeviceRow } from '../lib/rows.js';
@@ -23,6 +23,7 @@ import { listAccessibleVaults, publicVault } from '../lib/vaults.js';
 import {
   clientIp,
   displayNameSchema,
+  emailVerificationRequired,
   mfaCodeSchema,
   type RouteContext,
 } from './context.js';
@@ -108,7 +109,9 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
   app.post('/v1/account/mfa/recovery-codes', async (request) => {
     const auth = await requireAuth(db, config, request);
     limiter.hit(`mfa-recovery:${auth.user.id}`, 5);
-    await requireReauth(context, request, auth.user.id, auth.user.password_hash);
+    // Fresh recovery codes are a working second factor, so handing them out
+    // on the password alone would let a password be turned into full access.
+    await requireReauth(context, request, auth.user.id, auth.user.password_hash, { requireMfa: true });
     if (!(await isMfaEnabled(db, auth.user.id))) {
       throw new ApiError(400, 'mfa_not_enabled', 'Two-factor authentication is not enabled');
     }
@@ -202,12 +205,14 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
       }
     }
 
+    await assertOwnsNoTeams(db, auth.user.id);
+
     await audit(db, auth.user.id, 'account.delete', `user:${auth.user.id}`, {
       email: auth.user.email,
     }, clientIp(request));
-    // Cascades remove devices, sessions, vaults, memberships and encrypted
-    // records. The audit line above survives with a null actor.
-    await db.prepare('DELETE FROM users WHERE id = ?').run(auth.user.id);
+    // Cascades remove devices, sessions, personal vaults, memberships and
+    // their encrypted records. The audit line above survives with a null actor.
+    await deleteAccount(db, auth.user.id);
     return reply.code(204).send();
   });
 
@@ -265,13 +270,13 @@ export async function accountBundle(context: RouteContext, userId: string) {
 
   const platform = await readSetting(db, 'platform');
   const vaults = await listAccessibleVaults(db, userId);
-  const canSync = !platform.requireEmailVerification || Boolean(user.email_verified);
+  const canSync = !emailVerificationRequired(platform) || Boolean(user.email_verified);
 
   return {
     user: publicUser(user),
     // Shaped for the Ravelon clients, which read `entitlements.canSync` to
     // decide whether to offer sync at all. Self-hosted has no paid tier, so
-    // the only gate is the operator's email-verification policy.
+    // the only gate is whether this deployment requires a confirmed address.
     entitlements: {
       canSync,
       maxDevices: null,
@@ -307,27 +312,10 @@ async function requireReauth(
   if (!body.success) {
     throw new ApiError(400, 'reauthentication_required', 'Confirm your password to continue');
   }
-  const failKey = `reauth:${userId}`;
-  if (context.limiter.isLockedOut(failKey)) {
-    throw new ApiError(429, 'too_many_attempts', 'Too many failed attempts. Try again later');
-  }
-  if (!(await verifyPassword(body.data.password, passwordHash))) {
-    context.limiter.recordFailure(failKey);
-    throw new ApiError(401, 'invalid_credentials', 'Password is incorrect');
-  }
-  context.limiter.clearFailures(failKey);
-
-  const mfaEnabled = await isMfaEnabled(context.db, userId);
-  if (mfaEnabled && (options.requireMfa || body.data.mfaCode)) {
-    if (!body.data.mfaCode) {
-      throw new ApiError(400, 'mfa_code_required', 'Enter a code from your authenticator');
-    }
-    const factor = await verifySecondFactor(context.db, context.config, userId, body.data.mfaCode);
-    if (!factor) {
-      context.limiter.recordFailure(failKey);
-      throw new ApiError(400, 'invalid_mfa_code', 'That code is not valid');
-    }
-  }
+  await verifyReauth(context, userId, passwordHash, body.data, {
+    requireMfa: options.requireMfa,
+    ip: clientIp(request),
+  });
 }
 
 function publicDevice(device: DeviceRow) {

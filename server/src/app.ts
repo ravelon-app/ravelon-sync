@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
@@ -10,12 +9,14 @@ import { z } from 'zod';
 
 import type { Config } from './config.js';
 import { type AppDatabase, openDatabase } from './db/database.js';
+import { verifyAccessToken } from './lib/crypto.js';
 import { ApiError } from './lib/errors.js';
 import { RateLimiter } from './lib/rate-limit.js';
 import { SyncEventHub } from './lib/sync-events.js';
 import { SYNC_BODY_LIMIT_BYTES } from './routes/sync.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerClientRoutes } from './routes/clients.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import type { RouteContext } from './routes/context.js';
 import { registerDesktopRoutes } from './routes/desktop.js';
@@ -23,6 +24,37 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerSyncRoutes } from './routes/sync.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerVaultRoutes } from './routes/vaults.js';
+
+/**
+ * Sent with every response, API and interface alike.
+ *
+ * The built interface loads only same-origin module scripts, stylesheets and
+ * fonts, with no inline script or style element, so the policy allows
+ * nothing else beyond data: images and fonts. That turns an injected script into a refused load rather
+ * than code running with a signed-in session's tokens.
+ */
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  // Vite inlines the smallest font subsets into the stylesheet as data: URIs.
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const SECURITY_HEADERS: Record<string, string> = {
+  'Content-Security-Policy': CONTENT_SECURITY_POLICY,
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()',
+};
 
 /** Everything except the sync push, which sets its own much larger limit. */
 const GENERAL_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
@@ -72,7 +104,6 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
     syncEvents: new SyncEventHub(),
   };
 
-  await app.register(cookie);
   await app.register(websocket, {
     options: { maxPayload: 64 * 1024 },
   });
@@ -86,13 +117,40 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
     maxAge: 86_400,
   });
 
-  app.addHook('onSend', async (_request, reply, payload) => {
+  // One general budget per account for everything authenticated. Sync push
+  // and pull count against their own, larger limit and the desktop vault
+  // routes are polled continuously by design, so they are left out here
+  // rather than being counted twice. Only the token's signature is checked:
+  // the route itself still runs the full requireAuth, and an invalid token
+  // is refused there.
+  app.addHook('onRequest', async (request) => {
+    if (!config.rateLimit.enabled) return;
+    const path = request.url.split('?')[0] ?? '';
+    if (!path.startsWith('/v1/')) return;
+    if (path.startsWith('/v1/sync/') || path.startsWith('/v1/desktop/vault')) return;
+    const header = request.headers.authorization ?? '';
+    if (!header.startsWith('Bearer ')) return;
+    const claims = verifyAccessToken(config.jwtSecret, header.slice(7).trim());
+    if (!claims) return;
+    context.limiter.hit(`api:${claims.sub}`, config.rateLimit.apiPerUserPerMin);
+  });
+
+  app.addHook('onSend', async (request, reply, payload) => {
+    const path = request.url.split('?')[0] ?? '';
     // No API response is ever a shared cache's business, and several carry
-    // tokens that must not be stored by an intermediary.
-    reply.header('Cache-Control', 'no-store');
-    reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Referrer-Policy', 'no-referrer');
-    reply.header('X-Frame-Options', 'DENY');
+    // tokens that must not be stored by an intermediary. Static files keep
+    // what the static handler chose, so hashed assets stay cacheable instead
+    // of being fetched again on every page load.
+    if (path.startsWith('/v1/') || path.startsWith('/healthz') || !reply.hasHeader('cache-control')) {
+      reply.header('Cache-Control', 'no-store');
+    }
+    for (const [name, value] of Object.entries(SECURITY_HEADERS)) reply.header(name, value);
+    // HSTS only over HTTPS: sent over plain HTTP it is ignored at best, and a
+    // development server on http://localhost must not be pinned to HTTPS.
+    // request.protocol only reflects X-Forwarded-Proto from a trusted proxy.
+    if (request.protocol === 'https') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000');
+    }
     return payload;
   });
 
@@ -135,6 +193,7 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
   registerSyncRoutes(app, context);
   registerDesktopRoutes(app, context);
   registerAdminRoutes(app, context);
+  registerClientRoutes(app, context);
 
   await registerWebInterface(app, config);
 
@@ -167,9 +226,12 @@ async function registerWebInterface(app: FastifyInstance, config: Config): Promi
           reply.header('Cache-Control', 'no-cache');
           return;
         }
-        if (/\/assets\//.test(filePath)) {
+        if (/[\\/]assets[\\/]/.test(filePath)) {
           reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+          return;
         }
+        // Unhashed files such as the favicon keep their name across deploys.
+        reply.header('Cache-Control', 'no-cache');
       },
     });
   }

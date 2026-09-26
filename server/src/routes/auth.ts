@@ -13,6 +13,8 @@ import {
   rotateRefreshToken,
 } from '../auth/sessions.js';
 import { completeMfaChallenge, isMfaEnabled, issueMfaChallenge } from '../auth/mfa.js';
+import { mfaUserFailKey, verifyReauth } from '../auth/reauth.js';
+import type { AppDatabase } from '../db/database.js';
 import { hashPassword, randomToken, sha256, verifyPassword } from '../lib/crypto.js';
 import { ApiError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
@@ -61,10 +63,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     limiter.hit(`auth:${clientIp(request)}`, config.rateLimit.authPerIpPerMin);
     const body = registerBody.parse(request.body);
 
+    // Policy first: on an invite-only or closed server, answering
+    // account_exists before the policy refusal would let anyone probe which
+    // addresses have accounts here.
+    const invite = await checkRegistrationAllowed(context, body.email, body.inviteToken);
     if (await getUserByEmail(db, body.email)) {
       throw new ApiError(409, 'account_exists', 'An account with this email already exists');
     }
-    const invite = await checkRegistrationAllowed(context, body.email, body.inviteToken);
 
     const userId = newId();
     const now = nowIso();
@@ -143,6 +148,12 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       : await verifyPassword(body.password, DUMMY_HASH);
     if (!user || !passwordValid) {
       limiter.recordFailure(failKey);
+      // The attempted address is kept so an operator can spot credential
+      // stuffing; the password never is.
+      await audit(db, user?.id ?? null, 'auth.login_failed', user ? `user:${user.id}` : null, {
+        email: body.email,
+        knownAccount: Boolean(user),
+      }, clientIp(request));
       throw new ApiError(401, 'invalid_credentials', 'Invalid email or password');
     }
     if (user.disabled) {
@@ -158,7 +169,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
           'This account uses two-factor authentication. Update your Ravelon client to sign in',
         );
       }
-      if (limiter.isLockedOut(`mfa-user:${user.id}`)) {
+      if (limiter.isLockedOut(mfaUserFailKey(user.id))) {
         throw new ApiError(429, 'too_many_attempts', 'Too many failed codes. Try again later');
       }
       const challenge = await issueMfaChallenge(
@@ -193,6 +204,14 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     if (limiter.isLockedOut(challengeKey)) {
       throw new ApiError(429, 'too_many_attempts', 'Too many failed codes. Start a new sign-in');
     }
+    // Read up front so a wrong code counts against the account as well as the
+    // challenge. Counting per challenge alone would let an attacker who has
+    // the password start a fresh challenge every few guesses and never stop.
+    const challengeOwner = await db.prepare('SELECT user_id FROM mfa_challenges WHERE challenge_hash = ?')
+      .get<{ user_id: string }>(sha256(body.challengeToken));
+    if (challengeOwner && limiter.isLockedOut(mfaUserFailKey(challengeOwner.user_id))) {
+      throw new ApiError(429, 'too_many_attempts', 'Too many failed codes. Try again later');
+    }
 
     let completed: Awaited<ReturnType<typeof completeMfaChallenge>>;
     try {
@@ -200,11 +219,17 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     } catch (error) {
       if (error instanceof ApiError && error.code === 'invalid_mfa_code') {
         limiter.recordFailure(challengeKey);
+        if (challengeOwner) {
+          limiter.recordFailure(mfaUserFailKey(challengeOwner.user_id));
+          await audit(db, challengeOwner.user_id, 'auth.mfa_failed', `user:${challengeOwner.user_id}`, {
+            stage: 'sign_in',
+          }, clientIp(request));
+        }
       }
       throw error;
     }
     limiter.clearFailures(challengeKey);
-    limiter.clearFailures(`mfa-user:${completed.challenge.user_id}`);
+    limiter.clearFailures(mfaUserFailKey(completed.challenge.user_id));
 
     await audit(db, completed.challenge.user_id, 'auth.login', `user:${completed.challenge.user_id}`, {
       mfa: true,
@@ -223,7 +248,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
   app.post('/v1/auth/refresh', async (request) => {
     const body = z.object({ refreshToken: z.string().min(20).max(400) }).parse(request.body ?? {});
-    return await rotateRefreshToken(db, config, body.refreshToken);
+    return await rotateRefreshToken(db, config, body.refreshToken, { ip: clientIp(request) });
   });
 
   app.post('/v1/auth/logout', async (request, reply) => {
@@ -235,16 +260,27 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
   app.post('/v1/auth/password/change', async (request, reply) => {
     const auth = await requireAuth(db, config, request);
+    limiter.hit(`password-change:${auth.user.id}`, 10);
     const body = z.object({
       currentPassword: z.string().min(1).max(512),
       newPassword: passwordSchema,
+      mfaCode: mfaCodeSchema.optional(),
     }).parse(request.body);
 
-    if (!(await verifyPassword(body.currentPassword, auth.user.password_hash))) {
-      throw new ApiError(401, 'invalid_credentials', 'Current password is incorrect');
-    }
+    // Shares the reauthentication lockout, so a stolen session cannot guess
+    // the current password here without limit. A second factor is checked
+    // when sent but not yet required: the desktop and iOS clients call this
+    // without one, and requiring it would lock them out of changing a
+    // password at all.
+    await verifyReauth(context, auth.user.id, auth.user.password_hash, {
+      password: body.currentPassword,
+      mfaCode: body.mfaCode,
+    }, { wrongPasswordStatus: 400, ip: clientIp(request) });
+
     await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(await hashPassword(body.newPassword), nowIso(), auth.user.id);
+    // A reset link requested before the change must not be able to undo it.
+    await invalidatePasswordResetTokens(db, auth.user.id);
     // Every other device is signed out: a password change is how someone
     // responds to a suspected compromise, and it has to actually end sessions.
     await revokeAllSessions(db, auth.user.id, auth.deviceId);
@@ -267,15 +303,28 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
       const platform = await readSetting(db, 'platform');
       const resetUrl = `${publicOrigin(config, request)}/reset-password?token=${encodeURIComponent(token)}`;
-      const delivery = await sendMail(db, config, passwordResetEmail({
-        serverName: platform.serverName,
-        to: user.email,
-        resetUrl,
-        expiresAt,
-      }));
-      await audit(db, user.id, 'auth.password_reset_request', `user:${user.id}`, {
-        delivered: delivery.sent,
-      }, clientIp(request));
+      const ip = clientIp(request);
+      // Not awaited. An SMTP round trip only happens for a real account, so
+      // waiting for it would make the response time reveal which addresses
+      // exist here.
+      void (async () => {
+        const delivery = await sendMail(db, config, passwordResetEmail({
+          serverName: platform.serverName,
+          to: user.email,
+          resetUrl,
+          expiresAt,
+        }));
+        await audit(db, user.id, 'auth.password_reset_request', `user:${user.id}`, {
+          delivered: delivery.sent,
+        }, ip);
+      })().catch((error: unknown) => {
+        // Only the error class and code: the message could quote the mail,
+        // and the mail carries the reset token.
+        request.log.warn({
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: (error as { code?: unknown } | null)?.code ?? null,
+        }, 'password reset mail failed');
+      });
     }
 
     // The same answer either way, so this endpoint cannot be used to find out
@@ -305,6 +354,9 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       }
       await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
         .run(await hashPassword(body.newPassword), nowIso(), row.user_id);
+      // Any other link sent before this reset is spent too, so an older mail
+      // found later cannot set the password again.
+      await invalidatePasswordResetTokens(db, row.user_id);
       return row.user_id;
     })();
 
@@ -344,6 +396,12 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     await audit(db, userId, 'auth.email_verified', `user:${userId}`, null, clientIp(request));
     return { verified: true };
   });
+}
+
+/** Marks every unused reset link for an account as spent. */
+export async function invalidatePasswordResetTokens(db: AppDatabase, userId: string): Promise<void> {
+  await db.prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL')
+    .run(nowIso(), userId);
 }
 
 /**

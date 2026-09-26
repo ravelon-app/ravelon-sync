@@ -6,9 +6,10 @@ import { z } from 'zod';
 import { newId, nowIso } from '../config.js';
 import { lockSection } from '../db/database.js';
 import { issueSession, requireAuth } from '../auth/sessions.js';
-import { isMfaEnabled, verifySecondFactor } from '../auth/mfa.js';
+import { isMfaEnabled } from '../auth/mfa.js';
+import { verifyReauth } from '../auth/reauth.js';
 import { audit } from '../lib/audit.js';
-import { randomToken, sha256, verifyPassword } from '../lib/crypto.js';
+import { randomToken, sha256 } from '../lib/crypto.js';
 import { ApiError } from '../lib/errors.js';
 import { encodedBytes, vaultCursor } from '../lib/sync.js';
 import {
@@ -34,13 +35,18 @@ const DESKTOP_VAULT_BODY_LIMIT_BYTES = 24 * 1024 * 1024;
 /**
  * How long `/v1/desktop/vault/watch` holds a request open.
  *
- * Under a minute, so a reverse proxy's default idle timeout does not cut the
- * connection before the server answers.
+ * Well under a minute, so a reverse proxy's default idle timeout does not cut
+ * the connection first, and under the iOS client's 35 second request timeout,
+ * which otherwise turned every quiet poll into a network error.
  */
-const VAULT_WATCH_TIMEOUT_MS = 50 * 1000;
+export const VAULT_WATCH_TIMEOUT_MS = 25 * 1000;
+
+/** Long-polls one account may hold open at once. */
+const MAX_WATCHES_PER_USER = 16;
 
 export function registerDesktopRoutes(app: FastifyInstance, context: RouteContext): void {
   const { db, config, limiter, syncEvents } = context;
+  const heldWatches = new Map<string, number>();
 
   /**
    * Starts browser-approved pairing.
@@ -119,22 +125,15 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     }).parse(request.body);
 
     // Approving a pairing hands out a full session on a device that has not
-    // authenticated at all, so the password is checked again here even though
-    // the caller already holds a token.
-    if (!(await verifyPassword(body.password, auth.user.password_hash))) {
-      limiter.recordFailure(`pair-approve:${auth.user.id}`);
-      throw new ApiError(401, 'invalid_credentials', 'Password is incorrect');
-    }
-    let mfaVerified = false;
-    if (await isMfaEnabled(db, auth.user.id)) {
-      if (!body.mfaCode) {
-        throw new ApiError(400, 'mfa_code_required', 'Enter a code from your authenticator');
-      }
-      if (!(await verifySecondFactor(db, config, auth.user.id, body.mfaCode))) {
-        throw new ApiError(400, 'invalid_mfa_code', 'That code is not valid');
-      }
-      mfaVerified = true;
-    }
+    // authenticated at all, so the password, and the second factor where one
+    // is enrolled, are checked again even though the caller holds a token.
+    // Guesses count against the same per-account lockout as every other
+    // sensitive change, so a stolen session cannot spread them across routes.
+    await verifyReauth(context, auth.user.id, auth.user.password_hash, {
+      password: body.password,
+      mfaCode: body.mfaCode,
+    }, { requireMfa: true, ip: clientIp(request) });
+    const mfaVerified = await isMfaEnabled(db, auth.user.id);
 
     const claimed = await db.prepare(
       `UPDATE desktop_auth_requests
@@ -201,7 +200,9 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     return {
       ...session,
       status: 'complete',
-      user: { email: bundle.user.email, id: bundle.user.id },
+      // The same user shape as `/v1/account/me`, so a client signed in through
+      // the browser has the display name without a second request.
+      user: bundle.user,
       entitlements: bundle.entitlements,
       vaults: bundle.vaults,
     };
@@ -259,19 +260,38 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
    */
   app.get('/v1/desktop/vault/watch', async (request) => {
     const auth = await requireAuth(db, config, request);
+    limiter.hit(`watch:${auth.user.id}`, config.rateLimit.syncPerUserPerMin);
     const query = z.object({
       vaultId: z.string().min(1).max(160).optional(),
       afterVersion: z.coerce.number().int().nonnegative().default(0),
+      // Granular clients wait on the sync cursor rather than the legacy
+      // snapshot version. Clients that sent their cursor as `afterVersion`
+      // were answered at once, every time, because a granular vault's snapshot
+      // version stays 0; they now send it here.
+      afterCursor: z.coerce.number().int().nonnegative().optional(),
     }).parse(request.query);
     const vault = query.vaultId
       ? await requireVaultAccess(db, auth.user.id, query.vaultId)
       : await ensurePersonalVault(db, auth.user.id);
 
     const current = await snapshotStatus(context, vault.id);
-    if (current.version !== query.afterVersion || current.exists !== (query.afterVersion > 0)) {
-      return current;
+    const behind = query.afterCursor !== undefined
+      ? current.cursor !== String(query.afterCursor)
+      : current.version !== query.afterVersion || current.exists !== (query.afterVersion > 0);
+    if (behind) return current;
+    // Each held request is an open connection. A client needs one per watched
+    // vault; more than a handful means a runaway loop, which is answered
+    // immediately instead of being allowed to pile up.
+    const held = heldWatches.get(auth.user.id) ?? 0;
+    if (held >= MAX_WATCHES_PER_USER) return current;
+    heldWatches.set(auth.user.id, held + 1);
+    try {
+      await syncEvents.wait(vault.id, VAULT_WATCH_TIMEOUT_MS);
+    } finally {
+      const remaining = (heldWatches.get(auth.user.id) ?? 1) - 1;
+      if (remaining > 0) heldWatches.set(auth.user.id, remaining);
+      else heldWatches.delete(auth.user.id);
     }
-    await syncEvents.wait(vault.id, VAULT_WATCH_TIMEOUT_MS);
     return await snapshotStatus(context, vault.id);
   });
 
@@ -343,9 +363,12 @@ async function snapshotStatus(context: RouteContext, vaultId: string) {
   const row = await context.db.prepare(
     'SELECT version, updated_at FROM desktop_vault_blobs WHERE vault_id = ?',
   ).get<{ version: number; updated_at: string }>(vaultId);
+  // `cursor` is the granular head, so one request tells a client both whether
+  // a legacy snapshot exists and whether it has missed a granular change.
+  const cursor = String(await vaultCursor(context.db, vaultId));
   return row
-    ? { exists: true, version: Number(row.version), updatedAt: row.updated_at, vaultId }
-    : { exists: false, version: 0, updatedAt: null, vaultId };
+    ? { exists: true, version: Number(row.version), updatedAt: row.updated_at, vaultId, cursor }
+    : { exists: false, version: 0, updatedAt: null, vaultId, cursor };
 }
 
 function randomDigits(count: number): string {

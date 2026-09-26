@@ -32,10 +32,17 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
 
       # Only your reverse proxy's address belongs here. Trusting anything else
-      # lets a client forge its own IP and slip the rate limits.
+      # lets a client forge its own IP and slip the rate limits. A proxy on the
+      # host reaches this container from the bridge gateway (often 172.17.0.1
+      # or 172.18.0.1), not from 127.0.0.1; see docs/INSTALLATION.md.
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
 
+      # Fixed on purpose: this is the path inside the sync_data volume. A
+      # DATABASE_FILE in .env is for running without Docker and is ignored here.
       DATABASE_FILE: /data/ravelon-sync.db
+      # An external PostgreSQL instead of SQLite. Takes precedence when set.
+      # URL-encode special characters in the password (docs/INSTALLATION.md).
+      DATABASE_URL: ${DATABASE_URL:-}
 
       # Optional. Without mail, invitations and resets are links you copy from
       # the admin interface.
@@ -46,9 +53,24 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-Ravelon Sync <sync@localhost>}
 
+      # Every other setting .env.example documents. Compose only hands a
+      # container what is listed here, so a value missing from this block
+      # would be silently ignored.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Unset keeps the bundled interface; an empty value means API only.
+      WEB_ROOT: ${WEB_ROOT-/app/server/public}
       VAULT_STORAGE_LIMIT_MB: ${VAULT_STORAGE_LIMIT_MB:-256}
       VAULTS_PER_USER: ${VAULTS_PER_USER:-50}
+      ACCESS_TOKEN_TTL_SEC: ${ACCESS_TOKEN_TTL_SEC:-900}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-60}
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-false}
+      RATE_LIMIT_AUTH_PER_IP: ${RATE_LIMIT_AUTH_PER_IP:-30}
+      RATE_LIMIT_AUTH_FAILURES: ${RATE_LIMIT_AUTH_FAILURES:-10}
+      RATE_LIMIT_SYNC_PER_USER: ${RATE_LIMIT_SYNC_PER_USER:-240}
+      RATE_LIMIT_API_PER_USER: ${RATE_LIMIT_API_PER_USER:-600}
     volumes:
+      # A named volume is owned by the image's user. To use a host directory
+      # instead, it must be writable by uid 1000: sudo chown 1000:1000 ./data
       - sync_data:/data
     ports:
       # Bound to loopback by default: the reverse proxy is what faces the

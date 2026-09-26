@@ -317,6 +317,7 @@ export const en = {
   "admin.smtpHost": "SMTP host",
   "admin.smtpPort": "Port",
   "admin.smtpSecurity": "Encryption",
+  "admin.smtpSecurityNone": "None (unencrypted)",
   "admin.smtpUser": "Username",
   "admin.smtpPassword": "Password",
   "admin.smtpPasswordSet": "A password is stored. Leave empty to keep it.",
@@ -350,4 +351,7 @@ export const en = {
   "error.sessionExpired": "Your session expired. Sign in again.",
   "error.notFound": "That page does not exist.",
   "error.forbidden": "You do not have access to that.",
+  "error.personalVaultRequired": "Your first personal vault holds your account key and cannot be deleted.",
+  "error.ownsTeams": "Transfer or delete the teams you own first.",
+  "vaults.primaryHint": "Holds your account key",
 } as const;

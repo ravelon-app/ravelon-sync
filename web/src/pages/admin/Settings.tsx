@@ -328,7 +328,7 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
               >
                 <option value="starttls">STARTTLS (587)</option>
                 <option value="tls">TLS (465)</option>
-                <option value="none">None</option>
+                <option value="none">{t("admin.smtpSecurityNone")}</option>
               </Select>
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">

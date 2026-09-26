@@ -164,7 +164,9 @@ export function Shell() {
                 {config.maintenanceMessage || null}
               </Notice>
             ) : null}
-            {config?.requireEmailVerification && !account.user.emailVerified ? (
+            {/* canSync is the server's effective policy, which also covers
+                domain sign-up, not only the explicit setting. */}
+            {!account.entitlements.canSync && !account.user.emailVerified ? (
               <Notice tone="warn" className="mb-6">
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {t("overview.securityEmailUnverified")}

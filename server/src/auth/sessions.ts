@@ -2,6 +2,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { type Config, newId, nowIso } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
+import { audit } from '../lib/audit.js';
 import { randomToken, sha256, signAccessToken, verifyAccessToken } from '../lib/crypto.js';
 import { ApiError } from '../lib/errors.js';
 import type { DeviceRow, RefreshTokenRow, UserRow } from '../lib/rows.js';
@@ -95,6 +96,7 @@ export async function rotateRefreshToken(
   db: AppDatabase,
   config: Config,
   refreshToken: string,
+  options: { ip?: string | null } = {},
 ): Promise<IssuedSession> {
   const tokenHash = sha256(refreshToken);
   const outcome = await db.transaction(async () => {
@@ -132,6 +134,10 @@ export async function rotateRefreshToken(
 
   if (outcome.status === 'reuse') {
     await revokeDeviceSessions(db, outcome.deviceId);
+    // A replayed refresh token is the one signal of a stolen session this
+    // server gets, so the operator and the account holder must be able to
+    // see it. The token itself is never recorded.
+    await audit(db, outcome.userId, 'auth.refresh_reuse_detected', `device:${outcome.deviceId}`, null, options.ip ?? null);
     throw new ApiError(401, 'refresh_token_reused', 'Session was revoked. Sign in again');
   }
   if (outcome.status === 'disabled') {

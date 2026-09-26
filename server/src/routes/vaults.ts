@@ -122,6 +122,23 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
     if (vault.kind === 'team' && vault.team_id) {
       await requireTeamAdmin(db, auth.user.id, vault.team_id);
     }
+    // The first personal vault holds the account key envelope every device
+    // opens with the account password. Deleting it would take that envelope
+    // with it, and the next device would mint a different secret than the
+    // devices already signed in.
+    if (vault.kind === 'personal') {
+      const primary = await db.prepare(
+        `SELECT id FROM vaults WHERE user_id = ? AND kind = 'personal'
+         ORDER BY created_at ASC, id ASC LIMIT 1`,
+      ).get<{ id: string }>(auth.user.id);
+      if (primary?.id === vault.id) {
+        throw new ApiError(
+          409,
+          'personal_vault_required',
+          'The first personal vault holds the account key and cannot be deleted',
+        );
+      }
+    }
     await audit(db, auth.user.id, 'vault.delete', `vault:${vault.id}`, {
       name: vault.name,
       items: await countItems(context, vault.id),
@@ -294,6 +311,17 @@ export async function restoreSyncVersion(
     ).get<Record<string, unknown>>(versionId, vaultId, itemId);
     if (!version) throw new ApiError(404, 'version_not_found', 'That version does not exist');
 
+    // The restored copy must outrank whatever it replaces for clients that
+    // still resolve pushes by last writer wins; carrying the old revision over
+    // let any device holding the newer copy overwrite the restore again.
+    const replaced = await db.prepare(
+      'SELECT client_revision FROM sync_items WHERE vault_id = ? AND item_id = ?',
+    ).get<{ client_revision: number }>(vaultId, itemId);
+    const clientRevision = Math.max(
+      Number(version.client_revision),
+      replaced ? Number(replaced.client_revision) + 1 : 0,
+    );
+
     const cursor = await nextCursor(db);
     await db.prepare(
       `INSERT INTO sync_items
@@ -318,7 +346,7 @@ export async function restoreSyncVersion(
       version.ciphertext,
       version.nonce,
       version.schema_version,
-      version.client_revision,
+      clientRevision,
       version.updated_at,
       version.deleted_at ?? null,
       restoredAt,
@@ -333,7 +361,7 @@ export async function restoreSyncVersion(
       ciphertext: String(version.ciphertext),
       nonce: String(version.nonce),
       schemaVersion: Number(version.schema_version),
-      clientRevision: Number(version.client_revision),
+      clientRevision,
       updatedAt: String(version.updated_at),
       deletedAt: (version.deleted_at as string | null) ?? null,
       restoredAt,
