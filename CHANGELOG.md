@@ -5,6 +5,12 @@ Notable changes, newest first. This project follows
 
 ## Unreleased
 
+### Security
+
+- Nodemailer 10.0.13 and a patched fast-uri. The previous versions had
+  advisories for SMTP credential disclosure across transports, recipient
+  parsing that could exhaust the stack, and host normalisation.
+
 ### New
 
 - A team invitation lets the invited person create an account with that
