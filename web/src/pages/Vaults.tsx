@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Database, Plus, Trash2, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database, Pencil, Plus, Trash2, Users } from "lucide-react";
 
 import {
   Badge,
@@ -39,6 +39,7 @@ export function Vaults() {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Vault | null>(null);
   const [deleting, setDeleting] = useState<Vault | null>(null);
+  const [renaming, setRenaming] = useState<Vault | null>(null);
 
   const list = vaults.data?.vaults ?? [];
   // The server lists personal vaults oldest first; the first one holds the
@@ -72,8 +73,8 @@ export function Vaults() {
                   <Th>{t("common.name")}</Th>
                   <Th>{t("common.role")}</Th>
                   <Th className="text-right">{t("admin.vaultRecords")}</Th>
-                  <Th className="text-right">{t("admin.vaultStorage")}</Th>
-                  <Th>{t("vaults.lastActivity")}</Th>
+                  <Th className="hidden text-right xl:table-cell">{t("admin.vaultStorage")}</Th>
+                  <Th className="hidden xl:table-cell">{t("vaults.lastActivity")}</Th>
                   <Th className="text-right">{t("common.actions")}</Th>
                 </tr>
               </thead>
@@ -84,7 +85,11 @@ export function Vaults() {
                       <div className="flex items-center gap-2.5">
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-fg">{vault.name}</span>
-                          <span className="mt-0.5 block font-mono text-[11px] text-fg3">{vault.id}</span>
+                          {/* The full id wrapped over four lines in a narrow table; the
+                              first block is enough to tell vaults apart. */}
+                          <span className="mt-0.5 block font-mono text-[11px] text-fg3" title={vault.id}>
+                            {vault.id.slice(0, 8)}
+                          </span>
                           {vault.id === primaryPersonalId ? (
                             <span className="mt-0.5 block text-xs text-fg3">{t("vaults.primaryHint")}</span>
                           ) : null}
@@ -98,10 +103,10 @@ export function Vaults() {
                     <Td className="text-right font-mono tabular-nums">
                       {formatNumber(vault.itemCount ?? 0, locale)}
                     </Td>
-                    <Td className="text-right font-mono tabular-nums">
+                    <Td className="hidden text-right font-mono tabular-nums xl:table-cell">
                       {formatBytes(vault.storageBytes ?? 0)}
                     </Td>
-                    <Td className="whitespace-nowrap">{formatRelative(vault.updatedAt, locale)}</Td>
+                    <Td className="hidden whitespace-nowrap xl:table-cell">{formatRelative(vault.updatedAt, locale)}</Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -112,6 +117,16 @@ export function Vaults() {
                         >
                           {t("vaults.members")}
                         </Button>
+                        {vault.role === "owner" || vault.role === "admin" ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Pencil className="h-3.5 w-3.5" />}
+                            onClick={() => setRenaming(vault)}
+                            aria-label={t("common.rename")}
+                            title={t("common.rename")}
+                          />
+                        ) : null}
                         {vault.role === "owner" && vault.id !== primaryPersonalId ? (
                           <Button
                             size="sm"
@@ -134,6 +149,7 @@ export function Vaults() {
       <CreateVaultDialog open={creating} onClose={() => setCreating(false)} onCreated={vaults.reload} />
       <VaultMembersDialog vault={selected} onClose={() => setSelected(null)} />
       <DeleteVaultDialog vault={deleting} onClose={() => setDeleting(null)} onDeleted={vaults.reload} />
+      <RenameVaultDialog vault={renaming} onClose={() => setRenaming(null)} onRenamed={vaults.reload} />
     </>
   );
 }
@@ -281,6 +297,57 @@ function DeleteVaultDialog({
           />
         </Field>
       </div>
+    </Dialog>
+  );
+}
+
+function RenameVaultDialog({
+  vault,
+  onClose,
+  onRenamed,
+}: {
+  vault: Vault | null;
+  onClose(): void;
+  onRenamed(): void;
+}) {
+  const { t } = useI18n();
+  const { run, pending, error } = useAction();
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    setName(vault?.name ?? "");
+  }, [vault]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault || !name.trim()) return;
+    const renamed = await run(() => api.patch(`/v1/vaults/${encodeURIComponent(vault.id)}`, { name: name.trim() }));
+    if (renamed === undefined) return;
+    onRenamed();
+    onClose();
+  };
+
+  return (
+    <Dialog open={Boolean(vault)} onClose={onClose} title={t("vaults.renameTitle")}>
+      <form onSubmit={submit} className="space-y-4">
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+        <Field label={t("vaults.nameLabel")} htmlFor="vault-rename">
+          <Input
+            id="vault-rename"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={80}
+            autoFocus
+            required
+          />
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
+          <Button type="submit" variant="primary" loading={pending} disabled={!name.trim() || name.trim() === vault?.name}>
+            {t("common.rename")}
+          </Button>
+        </div>
+      </form>
     </Dialog>
   );
 }

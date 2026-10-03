@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { scalar } from '../db/database.js';
 import { readSetting } from '../lib/settings.js';
+import { resolveSmtp } from '../email/mailer.js';
 import { emailVerificationRequired, type RouteContext } from './context.js';
 
 /**
@@ -72,6 +73,11 @@ export function registerHealthRoutes(app: FastifyInstance, context: RouteContext
       maintenanceMode: platform.maintenanceMode,
       maintenanceMessage: platform.maintenanceMode ? platform.maintenanceMessage : '',
       passwordMinLength: 10,
+      /**
+       * Whether this server can send mail. The password-reset page uses it to
+       * stop promising a link that will never arrive.
+       */
+      emailDelivery: (await resolveSmtp(db, config)) !== null,
     };
   });
 }

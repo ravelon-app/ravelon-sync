@@ -140,7 +140,9 @@ export function AdminInvites() {
               <Notice tone="ok">{t("admin.inviteMailSent", { email: created.email })}</Notice>
             ) : created.email ? (
               <Notice tone="warn">
-                {t("admin.inviteMailFailed", { reason: created.emailError ?? "unknown" })}
+                {created.emailError === "smtp_not_configured"
+                  ? t("teams.inviteNoMail")
+                  : t("admin.inviteMailFailed", { reason: created.emailError ?? "unknown" })}
               </Notice>
             ) : (
               <Notice tone="info">{t("admin.inviteNoMail")}</Notice>

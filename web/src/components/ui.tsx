@@ -376,6 +376,7 @@ export function Dialog({
   children,
   footer,
   tone = "neutral",
+  dismissible = true,
 }: {
   open: boolean;
   onClose(): void;
@@ -384,6 +385,11 @@ export function Dialog({
   children?: ReactNode;
   footer?: ReactNode;
   tone?: "neutral" | "danger";
+  /**
+   * False hides the close button and ignores Escape and backdrop clicks, for
+   * a dialog that must only close through its own footer (recovery codes).
+   */
+  dismissible?: boolean;
 }) {
   const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -391,14 +397,16 @@ export function Dialog({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && dismissible) onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     // Focus moves into the dialog so a keyboard user is not left behind on the
     // page underneath.
-    const focusable = panelRef.current?.querySelector<HTMLElement>(
-      "input, select, textarea, button:not([disabled])",
-    );
+    // A field first: focusing the header's close button meant the first Enter
+    // closed the dialog instead of submitting it.
+    const focusable =
+      panelRef.current?.querySelector<HTMLElement>("input:not([disabled]), select, textarea")
+      ?? panelRef.current?.querySelector<HTMLElement>("button:not([disabled])");
     focusable?.focus();
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
@@ -406,7 +414,7 @@ export function Dialog({
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = overflow;
     };
-  }, [open, onClose]);
+  }, [open, onClose, dismissible]);
 
   if (!open) return null;
 
@@ -414,7 +422,7 @@ export function Dialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-ink/80 backdrop-blur-[2px] animate-fade"
-        onClick={onClose}
+        onClick={dismissible ? onClose : undefined}
         aria-hidden
       />
       <div
@@ -432,14 +440,16 @@ export function Dialog({
               <p className="mt-1.5 text-[13px] leading-relaxed text-fg2">{description}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.close")}
-            className="-mr-1 -mt-1 rounded-md p-1.5 text-fg3 transition-colors hover:bg-raised hover:text-fg"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {dismissible ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("common.close")}
+              className="-mr-1 -mt-1 rounded-md p-1.5 text-fg3 transition-colors hover:bg-raised hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
         {children ? <div className="px-5 py-4">{children}</div> : null}
         {footer ? (

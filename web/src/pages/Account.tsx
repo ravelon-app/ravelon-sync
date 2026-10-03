@@ -162,6 +162,8 @@ function PasswordPanel() {
       <form onSubmit={submit} className="space-y-4 px-5 py-4">
         {error ? <Notice tone="danger">{error}</Notice> : null}
         {done ? <Notice tone="ok">{t("account.passwordChanged")}</Notice> : null}
+        {/* The server cannot re-seal the account key; only a device can. */}
+        <Notice tone="info">{t("account.passwordKeyNote")}</Notice>
         <Field label={t("account.currentPassword")} htmlFor="current-password">
           <Input
             id="current-password"

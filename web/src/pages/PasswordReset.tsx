@@ -23,15 +23,25 @@ export function ForgotPassword() {
   return (
     <AuthLayout
       title={t("auth.resetTitle")}
-      subtitle={t("auth.resetSubtitle")}
+      subtitle={config?.emailDelivery === false ? undefined : t("auth.resetSubtitle")}
       footer={
         <Link to="/signin" className="font-medium text-teal underline-offset-2 hover:underline">
           {t("auth.signIn")}
         </Link>
       }
     >
-      {done ? (
-        <Notice tone="ok">{t("auth.resetSent")}</Notice>
+      {config?.emailDelivery === false ? (
+        // No mail means no link will ever arrive; saying one is on its way
+        // left people waiting. Point at the administrator instead.
+        <div className="space-y-4">
+          <Notice tone="info">{t("auth.resetNoSmtp")}</Notice>
+          <Notice tone="warn">{t("auth.resetKeyWarning")}</Notice>
+        </div>
+      ) : done ? (
+        <div className="space-y-4">
+          <Notice tone="ok">{t("auth.resetSent")}</Notice>
+          <Notice tone="warn">{t("auth.resetKeyWarning")}</Notice>
+        </div>
       ) : (
         <form onSubmit={submit} className="space-y-5">
           {error ? <Notice tone="danger">{error}</Notice> : null}
@@ -49,11 +59,6 @@ export function ForgotPassword() {
           <Button type="submit" variant="primary" loading={pending} className="w-full">
             {t("common.continue")}
           </Button>
-          {/* Without mail there is no link to send, so the honest answer is to
-              point at the administrator rather than let someone wait for one. */}
-          {config && !config.maintenanceMode ? (
-            <p className="text-center text-[12.5px] leading-relaxed text-fg3">{t("auth.resetNoSmtp")}</p>
-          ) : null}
         </form>
       )}
     </AuthLayout>
@@ -96,6 +101,7 @@ export function ResetPassword() {
       ) : (
         <form onSubmit={submit} className="space-y-5">
           {error ? <Notice tone="danger">{error}</Notice> : null}
+          <Notice tone="warn">{t("auth.resetKeyWarning")}</Notice>
           <Field
             label={t("auth.resetNewPassword")}
             hint={t("auth.passwordHint", { min: 10 })}
