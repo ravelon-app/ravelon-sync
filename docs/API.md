@@ -38,7 +38,9 @@ with no licence to check. A server that does not answer here cannot be added.
 ### `GET /v1/public-config`
 
 What the web interface needs before anyone signs in: whether the deployment
-still needs setup, and whether a sign-up form should exist.
+still needs setup, whether a sign-up form should exist, and `emailDelivery`,
+whether this server can send mail (the password-reset page offers a reset link
+only when it can).
 
 ### `GET /healthz`
 
@@ -55,13 +57,19 @@ Liveness for Docker and Kubernetes. Touches the database.
   "displayName": "Someone",
   "deviceName": "Workstation",
   "platform": "desktop",
-  "inviteToken": "ain_..."
+  "inviteToken": "ain_...",
+  "teamInviteToken": "tin_..."
 }
 ```
 
 `201` with a session. The first account on a fresh deployment is always
 allowed and becomes the administrator; after that the deployment's sign-up
 policy applies, and an invitation overrides it.
+
+`teamInviteToken` is a team invitation. It admits exactly the address it was
+sent to, whatever the sign-up policy, and joins the team in the same step; the
+response then carries its `teamId`. Another address answers
+`403 invite_email_mismatch`, a spent or revoked invitation `404 invite_invalid`.
 
 ### `POST /v1/auth/login`
 

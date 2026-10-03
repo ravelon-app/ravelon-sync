@@ -308,3 +308,82 @@ describe('personal vaults', () => {
     assert.equal(Number(items?.count ?? 0), 0);
   });
 });
+
+describe('signing up from a team invitation', () => {
+  let server: TestServer;
+  let owner: TestAccount;
+  let teamId: string;
+  let teamVaultId: string;
+
+  before(async () => {
+    // The first account; registration stays at the invite-only default.
+    server = await startTestServer();
+    owner = await register(server, 'lead@example.com');
+    const team = await api(server, 'POST', '/v1/teams', {
+      token: owner.accessToken,
+      body: { name: 'Ops', vaultName: 'Ops Vault' },
+    });
+    teamId = team.body.id;
+    teamVaultId = team.body.vaults[0].id;
+  });
+
+  after(async () => {
+    await server.close();
+  });
+
+  async function teamInvite(email: string): Promise<string> {
+    const invite = await api(server, 'POST', `/v1/teams/${teamId}/invites`, {
+      token: owner.accessToken,
+      body: { email, role: 'member', vaultRole: 'editor' },
+    });
+    assert.equal(invite.status, 201);
+    return invite.body.token;
+  }
+
+  function signUp(email: string, body: Record<string, unknown>) {
+    return api(server, 'POST', '/v1/auth/register', {
+      body: { email, password: 'correct-horse-battery-staple', deviceName: 'Web', platform: 'test', ...body },
+    });
+  }
+
+  test('without any invitation an invite-only server still refuses', async () => {
+    const refused = await signUp('walkin@example.com', {});
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.error.code, 'invite_required');
+  });
+
+  test('a team invitation admits the invited address and joins the team', async () => {
+    const token = await teamInvite('newcomer@example.com');
+    const created = await signUp('newcomer@example.com', { teamInviteToken: token });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.teamId, teamId);
+
+    const vaults = await api(server, 'GET', '/v1/vaults', { token: created.body.accessToken });
+    const teamVault = vaults.body.vaults.find((vault: any) => vault.id === teamVaultId);
+    assert.equal(teamVault?.role, 'editor', 'the new account reaches the team vault');
+
+    const reuse = await signUp('newcomer2@example.com', { teamInviteToken: token });
+    assert.equal(reuse.status, 404, 'a spent team invitation opens no second account');
+  });
+
+  test('a forwarded team invitation does not open an account for someone else', async () => {
+    const token = await teamInvite('intended@example.com');
+    const forwarded = await signUp('someone-else@example.com', { teamInviteToken: token });
+    assert.equal(forwarded.status, 403);
+    assert.equal(forwarded.body.error.code, 'invite_email_mismatch');
+
+    // The rightful person can still use it afterwards.
+    const rightful = await signUp('intended@example.com', { teamInviteToken: token });
+    assert.equal(rightful.status, 201);
+  });
+
+  test('a revoked team invitation admits nobody', async () => {
+    const token = await teamInvite('revoked@example.com');
+    const invites = await api(server, 'GET', `/v1/teams/${teamId}/invites`, { token: owner.accessToken });
+    const pending = invites.body.invites.find((invite: any) => invite.email === 'revoked@example.com');
+    const revoked = await api(server, 'DELETE', `/v1/teams/${teamId}/invites/${pending.id}`, { token: owner.accessToken });
+    assert.ok(revoked.status === 200 || revoked.status === 204, `revoke answered ${revoked.status}`);
+    const refused = await signUp('revoked@example.com', { teamInviteToken: token });
+    assert.equal(refused.status, 404);
+  });
+});

@@ -46,7 +46,13 @@ interface AuthValue {
   signedIn: boolean;
   signIn(email: string, password: string): Promise<SignInResult>;
   verifyMfa(challengeToken: string, code: string): Promise<void>;
-  signUp(input: { email: string; password: string; displayName?: string; inviteToken?: string }): Promise<void>;
+  signUp(input: {
+    email: string;
+    password: string;
+    displayName?: string;
+    inviteToken?: string;
+    teamInviteToken?: string;
+  }): Promise<void>;
   signOut(): Promise<void>;
   reloadAccount(): Promise<void>;
   reloadConfig(): Promise<void>;

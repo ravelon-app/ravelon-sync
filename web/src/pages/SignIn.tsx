@@ -7,6 +7,7 @@ import { Button, Field, Input, Notice } from "../components/ui";
 import { useAuth, type MfaChallenge } from "../lib/auth";
 import { useAction } from "../lib/hooks";
 import { useI18n } from "../lib/i18n";
+import { safeNext } from "../lib/navigation";
 
 export function SignIn() {
   const { t } = useI18n();
@@ -20,7 +21,7 @@ export function SignIn() {
   const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
   const [code, setCode] = useState("");
 
-  const next = params.get("next") || "/";
+  const next = safeNext(params.get("next"));
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,7 +94,7 @@ export function SignIn() {
         canSignUp ? (
           <>
             {t("auth.noAccount")}{" "}
-            <Link to="/signup" className="font-medium text-teal underline-offset-2 hover:underline">
+            <Link to={params.get("next") ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-teal underline-offset-2 hover:underline">
               {t("auth.signUp")}
             </Link>
           </>

@@ -367,26 +367,8 @@ export function registerTeamRoutes(app: FastifyInstance, context: RouteContext):
       throw new ApiError(409, 'already_team_member', 'You already belong to this team');
     }
 
-    const now = nowIso();
     await db.transaction(async () => {
-      const claimed = await db.prepare(
-        `UPDATE team_invites SET accepted_at = ?, accepted_by_user_id = ?
-         WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL`,
-      ).run(now, auth.user.id, invite.id);
-      if (claimed.changes !== 1) {
-        throw new ApiError(409, 'invite_already_used', 'This invitation has already been used');
-      }
-      await db.prepare(
-        `INSERT INTO team_members (team_id, user_id, role, default_vault_role, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(team_id, user_id) DO UPDATE SET
-           role = excluded.role, default_vault_role = excluded.default_vault_role, updated_at = excluded.updated_at`,
-      ).run(invite.team_id, auth.user.id, invite.role, invite.vault_role, now, now);
-      const vaults = await db.prepare("SELECT id FROM vaults WHERE team_id = ? AND kind = 'team'")
-        .all<{ id: string }>(invite.team_id);
-      for (const vault of vaults) {
-        await ensureVaultMember(db, vault.id, auth.user.id, invite.vault_role);
-      }
+      await joinTeamFromInvite(context, invite, auth.user.id);
     })();
 
     await audit(db, auth.user.id, 'team.invite_accept', `team:${invite.team_id}`, null, clientIp(request));
@@ -394,7 +376,39 @@ export function registerTeamRoutes(app: FastifyInstance, context: RouteContext):
   });
 }
 
-async function findUsableTeamInvite(context: RouteContext, token: string): Promise<TeamInviteRow> {
+/**
+ * Claims a team invitation for `userId` and grants the team and its vaults.
+ * Call inside a transaction: the claim is conditional, so two requests racing
+ * one link cannot both join.
+ */
+export async function joinTeamFromInvite(
+  context: RouteContext,
+  invite: TeamInviteRow,
+  userId: string,
+): Promise<void> {
+  const { db } = context;
+  const now = nowIso();
+  const claimed = await db.prepare(
+    `UPDATE team_invites SET accepted_at = ?, accepted_by_user_id = ?
+     WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL`,
+  ).run(now, userId, invite.id);
+  if (claimed.changes !== 1) {
+    throw new ApiError(409, 'invite_already_used', 'This invitation has already been used');
+  }
+  await db.prepare(
+    `INSERT INTO team_members (team_id, user_id, role, default_vault_role, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(team_id, user_id) DO UPDATE SET
+       role = excluded.role, default_vault_role = excluded.default_vault_role, updated_at = excluded.updated_at`,
+  ).run(invite.team_id, userId, invite.role, invite.vault_role, now, now);
+  const vaults = await db.prepare("SELECT id FROM vaults WHERE team_id = ? AND kind = 'team'")
+    .all<{ id: string }>(invite.team_id);
+  for (const vault of vaults) {
+    await ensureVaultMember(db, vault.id, userId, invite.vault_role);
+  }
+}
+
+export async function findUsableTeamInvite(context: RouteContext, token: string): Promise<TeamInviteRow> {
   const invite = await context.db.prepare('SELECT * FROM team_invites WHERE token_hash = ?')
     .get<TeamInviteRow>(sha256(token));
   if (

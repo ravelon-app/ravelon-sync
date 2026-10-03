@@ -21,6 +21,7 @@ import { audit } from '../lib/audit.js';
 import type { AccountInviteRow, UserRow } from '../lib/rows.js';
 import { readSetting } from '../lib/settings.js';
 import { ensurePersonalVault } from '../lib/vaults.js';
+import { findUsableTeamInvite, joinTeamFromInvite } from './teams.js';
 import { sendMail } from '../email/mailer.js';
 import { emailVerificationEmail, passwordResetEmail } from '../email/templates.js';
 import {
@@ -44,6 +45,11 @@ const registerBody = z.object({
   deviceName: deviceNameSchema.optional(),
   platform: platformSchema.optional(),
   inviteToken: z.string().trim().min(10).max(200).optional(),
+  /**
+   * A team invitation sent to this address. It admits the account even where
+   * sign-up needs an invitation, and the team is joined in the same step.
+   */
+  teamInviteToken: z.string().trim().min(10).max(400).optional(),
   /** Present on clients that can complete a second factor. */
   mfaSupported: z.boolean().optional(),
 });
@@ -66,7 +72,19 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     // Policy first: on an invite-only or closed server, answering
     // account_exists before the policy refusal would let anyone probe which
     // addresses have accounts here.
-    const invite = await checkRegistrationAllowed(context, body.email, body.inviteToken);
+    // A team invitation for exactly this address stands in for an account
+    // invitation: the person was invited by someone allowed to invite, and the
+    // address check below keeps a forwarded link from opening an account for
+    // anybody else.
+    const teamInvite = body.teamInviteToken && !body.inviteToken
+      ? await findUsableTeamInvite(context, body.teamInviteToken)
+      : null;
+    if (teamInvite && teamInvite.email.toLowerCase() !== body.email.toLowerCase()) {
+      throw new ApiError(403, 'invite_email_mismatch', 'This invitation was sent to a different email address');
+    }
+    const invite = teamInvite
+      ? null
+      : await checkRegistrationAllowed(context, body.email, body.inviteToken);
     if (await getUserByEmail(db, body.email)) {
       throw new ApiError(409, 'account_exists', 'An account with this email already exists');
     }
@@ -109,11 +127,16 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       }
 
       await ensurePersonalVault(db, userId);
+      if (teamInvite) await joinTeamFromInvite(context, teamInvite, userId);
       await audit(db, userId, 'auth.register', `user:${userId}`, {
         role,
         bootstrap: isFirstAccount,
         inviteId: invite?.id ?? null,
+        teamInviteId: teamInvite?.id ?? null,
       }, clientIp(request));
+      if (teamInvite) {
+        await audit(db, userId, 'team.invite_accept', `team:${teamInvite.team_id}`, null, clientIp(request));
+      }
     })();
 
     const session = await issueSession(
@@ -128,7 +151,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       // A deployment without SMTP is normal; verification stays available from
       // the account page.
     });
-    return reply.code(201).send({ ...session, isNewUser: true });
+    return reply.code(201).send({ ...session, isNewUser: true, teamId: teamInvite?.team_id ?? null });
   });
 
   app.post('/v1/auth/login', async (request, reply) => {

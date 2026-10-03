@@ -7,6 +7,7 @@ import { Button, Field, Input, Notice } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import { useAction } from "../lib/hooks";
 import { useI18n } from "../lib/i18n";
+import { safeNext, teamTokenFromNext } from "../lib/navigation";
 
 export function SignUp() {
   const { t } = useI18n();
@@ -16,7 +17,11 @@ export function SignUp() {
   const { run, pending, error } = useAction();
 
   const inviteToken = params.get("invite") ?? undefined;
-  const [email, setEmail] = useState("");
+  const next = safeNext(params.get("next"));
+  // A team invitation admits its own address even where sign-up needs an
+  // invitation; it arrives directly or inside the invitation page's "next".
+  const teamInviteToken = inviteToken ? undefined : params.get("team") ?? teamTokenFromNext(next) ?? undefined;
+  const [email, setEmail] = useState(params.get("email") ?? "");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
 
@@ -24,7 +29,7 @@ export function SignUp() {
   // An invitation is its own permission to register, so the deployment's mode
   // only decides whether the walk-in form should exist at all.
   const openToWalkIns = config?.registrationOpen || config?.registrationMode === "domain";
-  const blocked = !inviteToken && !openToWalkIns;
+  const blocked = !inviteToken && !teamInviteToken && !openToWalkIns;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -34,10 +39,12 @@ export function SignUp() {
         password,
         displayName: displayName.trim() || undefined,
         inviteToken,
+        teamInviteToken,
       });
       return true;
     });
-    if (result) navigate("/", { replace: true });
+    // Signing up with a team invitation already joined the team.
+    if (result) navigate(next !== "/" ? next : teamInviteToken ? "/teams" : "/", { replace: true });
   };
 
   if (blocked) {
@@ -65,7 +72,10 @@ export function SignUp() {
       footer={
         <>
           {t("auth.haveAccount")}{" "}
-          <Link to="/signin" className="font-medium text-teal underline-offset-2 hover:underline">
+          <Link
+            to={params.get("next") ? `/signin?next=${encodeURIComponent(next)}` : "/signin"}
+            className="font-medium text-teal underline-offset-2 hover:underline"
+          >
             {t("auth.signIn")}
           </Link>
         </>
@@ -77,6 +87,14 @@ export function SignUp() {
             <span className="flex items-center gap-2">
               <Ticket className="h-4 w-4 shrink-0 text-ok" />
               {t("auth.inviteAccepted")}
+            </span>
+          </Notice>
+        ) : null}
+        {teamInviteToken ? (
+          <Notice tone="ok">
+            <span className="flex items-center gap-2">
+              <Ticket className="h-4 w-4 shrink-0 text-ok" />
+              {t("auth.teamInviteAccepted")}
             </span>
           </Notice>
         ) : null}
