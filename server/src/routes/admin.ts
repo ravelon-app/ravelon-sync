@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { newId, nowIso, secretIsGenerated } from '../config.js';
 import { scalar } from '../db/database.js';
 import { disableMfa, isMfaEnabled } from '../auth/mfa.js';
-import { getUserByEmail, requireAdmin, revokeAllSessions } from '../auth/sessions.js';
+import { getUserByEmail, LIVE_DEVICE_SQL, requireAdmin, revokeAllSessions } from '../auth/sessions.js';
 import { resolveSmtp, sendMail, verifySmtp } from '../email/mailer.js';
 import { accountInviteEmail, testEmail } from '../email/templates.js';
 import { assertOwnsNoTeams, deleteAccount } from '../lib/accounts.js';
@@ -117,7 +117,11 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
         ...publicUser(user),
         mfaEnabled: await isMfaEnabled(db, user.id),
         vaults: await scalar(db, 'SELECT COUNT(*) AS count FROM vault_members WHERE user_id = ?', [user.id]),
-        devices: await scalar(db, 'SELECT COUNT(*) AS count FROM devices WHERE user_id = ?', [user.id]),
+        devices: await scalar(
+          db,
+          `SELECT COUNT(*) AS count FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}`,
+          [user.id, nowIso()],
+        ),
       }))),
     };
   });
@@ -132,8 +136,9 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
        JOIN vault_members vm ON vm.vault_id = v.id WHERE vm.user_id = ?`,
     ).all<{ id: string; name: string; kind: string; role: string }>(user.id);
     const devices = await db.prepare(
-      'SELECT id, name, platform, last_seen_at, created_at FROM devices WHERE user_id = ? ORDER BY created_at DESC',
-    ).all<Record<string, unknown>>(user.id);
+      `SELECT id, name, platform, last_seen_at, created_at FROM devices
+       WHERE user_id = ? AND ${LIVE_DEVICE_SQL} ORDER BY created_at DESC`,
+    ).all<Record<string, unknown>>(user.id, nowIso());
     const teams = await db.prepare(
       `SELECT t.id, t.name, tm.role FROM teams t
        JOIN team_members tm ON tm.team_id = t.id WHERE tm.user_id = ?`,
