@@ -16,6 +16,8 @@ export interface PublicConfig {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   passwordMinLength: number;
+  /** Absent on older servers; treat that as "unknown" and keep the form. */
+  emailDelivery?: boolean;
 }
 
 export interface User {

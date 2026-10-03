@@ -42,7 +42,9 @@ export function AdminSettings() {
     <>
       <PageHeader title={t("admin.settingsTitle")} />
       {settings.error ? <Notice tone="danger">{settings.error}</Notice> : null}
-      {settings.loading || !settings.data ? (
+      {/* Only the first load shows the placeholder: a reload after saving would
+          otherwise unmount both forms and drop their "Saved" confirmation. */}
+      {!settings.data ? (
         <Panel>
           <LoadingBlock />
         </Panel>
@@ -242,12 +244,15 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
     setForm(settings.smtp);
   }, [settings.smtp]);
 
-  const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+  const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+    // A result describes the settings it tested; after an edit it is stale.
+    setTestResult(null);
+    test.reset();
     setForm((current) => ({ ...current, [key]: value }));
+  };
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const saved = await save.run(() =>
+  const persist = () =>
+    save.run(() =>
       api.put("/v1/admin/settings/smtp", {
         enabled: form.enabled,
         host: form.host,
@@ -260,12 +265,22 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
         ...(password ? { password } : {}),
       }),
     );
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const saved = await persist();
     if (saved === undefined) return;
     setPassword("");
     onSaved();
   };
 
+  // The server tests what is saved, so save what is on screen first; testing
+  // anything else answered "configure SMTP first" for a form that looked done.
   const sendTest = async () => {
+    setTestResult(null);
+    const saved = await persist();
+    if (saved === undefined) return;
+    setPassword("");
     const result = await test.run(() =>
       api.post<{ ok: boolean; stage: string; error?: string }>("/v1/admin/settings/smtp/test", {}),
     );
@@ -281,6 +296,9 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
         ) : null}
         {save.error ? <Notice tone="danger">{save.error}</Notice> : null}
         {save.done ? <Notice tone="ok">{t("common.saved")}</Notice> : null}
+        {/* A refused test (nothing saved yet, bad input) answers with an error
+            instead of a result; without this the button seemed to do nothing. */}
+        {test.error ? <Notice tone="danger">{test.error}</Notice> : null}
         {testResult ? (
           testResult.ok ? (
             <Notice tone="ok">{t("admin.smtpTestSuccess")}</Notice>

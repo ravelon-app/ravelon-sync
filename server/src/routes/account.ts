@@ -13,7 +13,7 @@ import {
 } from '../auth/mfa.js';
 import { generateTotpSecret, totpUri } from '../auth/totp.js';
 import { verifyReauth } from '../auth/reauth.js';
-import { requireAuth, revokeAllSessions } from '../auth/sessions.js';
+import { LIVE_DEVICE_SQL, requireAuth, revokeAllSessions } from '../auth/sessions.js';
 import { assertOwnsNoTeams, deleteAccount } from '../lib/accounts.js';
 import { audit } from '../lib/audit.js';
 import { ApiError } from '../lib/errors.js';
@@ -219,8 +219,9 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
   app.get('/v1/devices', async (request) => {
     const auth = await requireAuth(db, config, request);
     const devices = await db.prepare(
-      'SELECT * FROM devices WHERE user_id = ? ORDER BY COALESCE(last_seen_at, created_at) DESC',
-    ).all<DeviceRow>(auth.user.id);
+      `SELECT * FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}
+       ORDER BY COALESCE(last_seen_at, created_at) DESC`,
+    ).all<DeviceRow>(auth.user.id, nowIso());
     return {
       devices: devices.map((device) => ({
         ...publicDevice(device),

@@ -5,6 +5,42 @@ Notable changes, newest first. This project follows
 
 ## Unreleased
 
+### New
+
+- A team invitation lets the invited person create an account with that
+  address, even when sign-up needs an invitation, and joins the team at once.
+  The invitation page offers "Create account and join" next to signing in.
+- Vaults and teams can be renamed in the web interface.
+
+### Improved
+
+- Deleting a team asks for its name first; it takes its vaults with it.
+- The team dialogs explain that a team vault also needs its sharing key from
+  the Ravelon app, sent separately from the invitation.
+- Changing, resetting or setting a password explains that Ravelon asks for the
+  previous password once to re-seal the vault key.
+- Without mail, "Forgot password" no longer promises a link; it points to an
+  administrator. The test button for mail saves the form first.
+- The device list only shows devices that are still signed in.
+- The vault table fits narrower windows.
+
+### Fixed
+
+- Deleting a vault or team and signing out a device worked, but the dialog
+  stayed open and the list unchanged
+- Saving the general settings showed no confirmation, and a refused mail test
+  showed nothing
+- After a second factor or a team invitation, sign-in ignored where it was
+  supposed to return to
+- Enter in the first step of turning on two-factor closed the dialog
+- The recovery-code dialog could be closed with Escape or its close button
+  before confirming the codes were saved
+- A session revoked by signing out, a password change or a disabled account
+  was logged as a stolen refresh token
+- Sign-up mentioned a separate sync passphrase, and the overview named the
+  wrong place in the app to enter the server
+- Administrators were labelled "Administration"; counts read "1 members"
+
 ### Important
 
 - `PUBLIC_URL` is now required when `NODE_ENV=production`; the server refuses

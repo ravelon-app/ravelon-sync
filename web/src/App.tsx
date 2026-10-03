@@ -1,9 +1,10 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import { Shell } from "./components/Shell";
 import { Notice, Spinner } from "./components/ui";
 import { AuthProvider, useAuth } from "./lib/auth";
+import { safeNext } from "./lib/navigation";
 import { I18nProvider, useI18n } from "./lib/i18n";
 import { Account } from "./pages/Account";
 import { Devices } from "./pages/Devices";
@@ -115,7 +116,11 @@ function RequireAdmin({ children }: { children: ReactNode }) {
 
 function RedirectIfSignedIn({ children }: { children: ReactNode }) {
   const { signedIn } = useAuth();
-  if (signedIn) return <Navigate to="/" replace />;
+  const [params] = useSearchParams();
+  // The page that sent someone here wins. Without this, finishing a sign-in
+  // re-rendered this guard first and dropped the "next" the form was about to
+  // follow, so a second factor or a team invitation landed on the overview.
+  if (signedIn) return <Navigate to={safeNext(params.get("next"))} replace />;
   return <>{children}</>;
 }
 

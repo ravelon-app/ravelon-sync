@@ -104,6 +104,11 @@ export async function rotateRefreshToken(
       .get<RefreshTokenRow>(tokenHash);
     if (!row || Date.parse(row.expires_at) <= Date.now()) return { status: 'invalid' as const };
     if (row.revoked_at) {
+      // Only a token that was rotated (replaced_by set) and comes back is a
+      // replay. One revoked by signing out, a password change or a disabled
+      // account is simply dead; calling that theft filled the audit log with
+      // false alarms whenever an operator locked an account.
+      if (!row.replaced_by) return { status: 'invalid' as const };
       return { status: 'reuse' as const, userId: row.user_id, deviceId: row.device_id };
     }
     const user = await getUserById(db, row.user_id);
@@ -164,6 +169,17 @@ export async function rotateRefreshToken(
     userId: outcome.user.id,
   };
 }
+
+/**
+ * A device counts as signed in while it holds a refresh token that is neither
+ * revoked nor expired. Signing out, a password change or an admin action only
+ * revoke tokens, so without this the device list kept showing them as signed
+ * in. Bind the current time as the parameter.
+ */
+export const LIVE_DEVICE_SQL = `EXISTS (
+  SELECT 1 FROM refresh_tokens r
+  WHERE r.device_id = devices.id AND r.revoked_at IS NULL AND r.expires_at > ?
+)`;
 
 export async function revokeDeviceSessions(db: AppDatabase, deviceId: string): Promise<void> {
   await db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL')

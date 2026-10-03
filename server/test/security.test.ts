@@ -632,6 +632,21 @@ describe('audit trail', () => {
     assert.doesNotMatch(String(rows[0]?.detail_json), /rft_/);
   });
 
+  test('a token that was signed out is refused without a theft alarm', async () => {
+    const before = (await auditRows(server, 'auth.refresh_reuse_detected')).length;
+    const session = await login(server, 'admin@example.com', PASSWORD);
+    const out = await api(server, 'POST', '/v1/auth/logout', {
+      body: { refreshToken: session.body.refreshToken },
+    });
+    assert.equal(out.status, 204);
+    const stale = await api(server, 'POST', '/v1/auth/refresh', {
+      body: { refreshToken: session.body.refreshToken },
+    });
+    assert.equal(stale.status, 401);
+    assert.equal(stale.body.error.code, 'invalid_refresh_token');
+    assert.equal((await auditRows(server, 'auth.refresh_reuse_detected')).length, before);
+  });
+
   test('an administrator changing verification or a name is recorded', async () => {
     await openRegistration(server, admin);
     const user = await register(server, 'person@example.com');

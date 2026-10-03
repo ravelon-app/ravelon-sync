@@ -71,9 +71,7 @@ export function AdminInvites() {
         {invites.loading ? (
           <LoadingBlock />
         ) : list.length === 0 ? (
-          <EmptyState icon={<Ticket className="h-7 w-7" />} title={t("admin.noInvites")}>
-            {t("admin.invitesSubtitle")}
-          </EmptyState>
+          <EmptyState icon={<Ticket className="h-7 w-7" />} title={t("admin.noInvites")} />
         ) : (
           <TableWrap>
             <table className="w-full border-collapse">
@@ -91,7 +89,7 @@ export function AdminInvites() {
                 {list.map((invite) => (
                   <tr key={invite.id} className="transition-colors hover:bg-raised/40">
                     <Td className="text-fg">{invite.email || t("admin.inviteAnyone")}</Td>
-                    <Td>{invite.role === "admin" ? t("nav.admin") : t("teams.roleMember")}</Td>
+                    <Td>{invite.role === "admin" ? t("admin.roleAdmin") : t("teams.roleMember")}</Td>
                     <Td>
                       <Badge tone={STATUS_TONES[invite.status]}>{invite.status}</Badge>
                       {invite.usedByEmail ? (
@@ -142,7 +140,9 @@ export function AdminInvites() {
               <Notice tone="ok">{t("admin.inviteMailSent", { email: created.email })}</Notice>
             ) : created.email ? (
               <Notice tone="warn">
-                {t("admin.inviteMailFailed", { reason: created.emailError ?? "unknown" })}
+                {created.emailError === "smtp_not_configured"
+                  ? t("teams.inviteNoMail")
+                  : t("admin.inviteMailFailed", { reason: created.emailError ?? "unknown" })}
               </Notice>
             ) : (
               <Notice tone="info">{t("admin.inviteNoMail")}</Notice>
@@ -210,7 +210,7 @@ function CreateInviteDialog({
               onChange={(event) => setRole(event.target.value as UserRole)}
             >
               <option value="user">{t("teams.roleMember")}</option>
-              <option value="admin">{t("nav.admin")}</option>
+              <option value="admin">{t("admin.roleAdmin")}</option>
             </Select>
           </Field>
           <Field label={t("admin.inviteExpiry")} htmlFor="invite-expiry">

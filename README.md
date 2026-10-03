@@ -112,10 +112,16 @@ There is nobody else who could let it in.
 
 ## Email is optional
 
-Without SMTP the server is fully usable: invitations and password resets appear
-as links in the admin interface for you to send however you like. Configure
-SMTP from **Administration → Settings** when you want them delivered
+Without SMTP the server is fully usable: account and team invitations appear
+as links for you to send however you like, and a locked-out person asks an
+administrator to set a new password (**Administration → Users**). Configure
+SMTP from **Administration → Settings** when you want mail delivered
 automatically, and use the test button before relying on it.
+
+A password set by an administrator, reset by mail or changed in the web
+interface does not re-seal the key a vault is encrypted with, because only a
+device can. The next time that person signs in to Ravelon, it asks for the
+previous password once. Changing the password in the Ravelon app avoids this.
 
 ## Documentation
 

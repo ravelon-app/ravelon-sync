@@ -88,13 +88,13 @@ export function Security() {
 
         {status.data?.enabled ? (
           <Panel>
-            <PanelHeader title={t("security.recoveryTitle")} description={t("security.recoveryBody")} />
+            <PanelHeader title={t("security.recoveryTitle")} description={t("security.recoveryStatusBody")} />
             <div className="space-y-4 px-5 py-4">
               <p className="text-[13px] text-fg2">
                 {t("security.recoveryRemaining", { count: status.data.recoveryCodesRemaining })}
               </p>
               {status.data.recoveryCodesRemaining <= 2 ? (
-                <Notice tone="warn">{t("security.recoveryBody")}</Notice>
+                <Notice tone="warn">{t("security.recoveryLow")}</Notice>
               ) : null}
               <Button onClick={() => setRegenerating(true)}>{t("security.recoveryRegenerate")}</Button>
             </div>
@@ -383,6 +383,7 @@ function RecoveryCodesDialog({
       }}
       title={t("security.recoveryTitle")}
       description={t("security.recoveryBody")}
+      dismissible={false}
       footer={
         <>
           <Button icon={<Download className="h-4 w-4" />} onClick={download}>

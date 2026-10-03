@@ -145,3 +145,30 @@ describe('storage quota', () => {
     await server.close();
   });
 });
+
+describe('the device list', () => {
+  let server: TestServer;
+
+  before(async () => {
+    server = await startTestServer();
+  });
+
+  after(async () => {
+    await server.close();
+  });
+
+  test('a device that signed out is no longer listed as signed in', async () => {
+    const account = await register(server, 'devices@example.com', { deviceName: 'Laptop' });
+    const second = await login(server, account.email, account.password, { deviceName: 'Browser' });
+    assert.equal(second.status, 200);
+
+    let list = await api(server, 'GET', '/v1/devices', { token: account.accessToken });
+    assert.deepEqual(list.body.devices.map((device: any) => device.name).sort(), ['Browser', 'Laptop']);
+
+    const out = await api(server, 'POST', '/v1/auth/logout', { body: { refreshToken: second.body.refreshToken } });
+    assert.equal(out.status, 204);
+
+    list = await api(server, 'GET', '/v1/devices', { token: account.accessToken });
+    assert.deepEqual(list.body.devices.map((device: any) => device.name), ['Laptop']);
+  });
+});
