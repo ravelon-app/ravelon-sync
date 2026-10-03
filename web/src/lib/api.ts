@@ -180,7 +180,10 @@ async function send<T>(path: string, options: RequestOptions, mayRetry: boolean)
 }
 
 async function unwrap<T>(response: Response): Promise<T> {
-  if (response.status === 204) return undefined as T;
+  // null, not undefined: useAction reports a failure as undefined, so a
+  // successful 204 (delete, sign out a device) would read as one and leave the
+  // dialog open with the list unchanged.
+  if (response.status === 204) return null as T;
   const text = await response.text();
   let body: unknown = null;
   if (text) {

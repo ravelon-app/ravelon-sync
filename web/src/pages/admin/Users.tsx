@@ -108,7 +108,7 @@ export function AdminUsers() {
                     <Td>
                       <div className="flex flex-wrap gap-1.5">
                         {user.role === "admin" ? (
-                          <Badge tone="accent">{t("nav.admin")}</Badge>
+                          <Badge tone="accent">{t("admin.roleAdmin")}</Badge>
                         ) : (
                           <Badge>{t("teams.roleMember")}</Badge>
                         )}

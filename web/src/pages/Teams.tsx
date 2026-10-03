@@ -63,9 +63,7 @@ export function Teams() {
         </Panel>
       ) : list.length === 0 ? (
         <Panel>
-          <EmptyState icon={<Users className="h-7 w-7" />} title={t("teams.empty")}>
-            {t("teams.subtitle")}
-          </EmptyState>
+          <EmptyState icon={<Users className="h-7 w-7" />} title={t("teams.empty")} />
         </Panel>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -78,7 +76,7 @@ export function Teams() {
                     {team.role === "owner" ? <Crown className="h-3.5 w-3.5 text-teal" /> : null}
                   </span>
                 }
-                description={t("teams.memberCount", { count: team.members })}
+                description={t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members })}
               />
               <div className="flex-1 px-5 py-4">
                 <p className="label-caps mb-2">{t("nav.vaults")}</p>
@@ -231,7 +229,7 @@ function TeamDetailDialog({
         open={Boolean(team) && !inviting && !created}
         onClose={onClose}
         title={team?.name ?? ""}
-        description={team ? t("teams.memberCount", { count: team.members }) : undefined}
+        description={team ? t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members }) : undefined}
         footer={
           <>
             {team?.role === "owner" ? (

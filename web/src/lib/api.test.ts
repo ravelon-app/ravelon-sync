@@ -197,3 +197,11 @@ describe("request", () => {
     expect(refreshBodies()).toHaveLength(1);
   });
 });
+
+describe("empty responses", () => {
+  test("a 204 resolves to null, which useAction does not mistake for a failure", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const { request } = await loadApi();
+    await expect(request("/v1/vaults/v1", { method: "DELETE", anonymous: true })).resolves.toBeNull();
+  });
+});

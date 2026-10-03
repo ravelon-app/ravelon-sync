@@ -60,11 +60,8 @@ export function AdminVaults() {
         <Stat
           label={t("admin.vaultStorage")}
           value={formatBytes(overview.data?.encryptedBytes ?? 0)}
-          hint={t("admin.vaultsSubtitle")}
         />
       </div>
-
-      <Notice tone="info" className="mb-4">{t("admin.vaultsSubtitle")}</Notice>
 
       {vaults.error ? <Notice tone="danger" className="mb-4">{vaults.error}</Notice> : null}
 
@@ -152,7 +149,7 @@ export function AdminAudit() {
         <PanelHeader
           title={t("admin.auditTitle")}
           description={
-            entries.data ? `${formatNumber(entries.data.total, locale)} ${t("admin.auditAction")}` : undefined
+            entries.data ? t(entries.data.total === 1 ? "admin.auditCountOne" : "admin.auditCount", { count: formatNumber(entries.data.total, locale) }) : undefined
           }
         />
         {entries.loading ? (

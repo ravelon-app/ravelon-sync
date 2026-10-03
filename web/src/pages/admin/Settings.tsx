@@ -42,7 +42,9 @@ export function AdminSettings() {
     <>
       <PageHeader title={t("admin.settingsTitle")} />
       {settings.error ? <Notice tone="danger">{settings.error}</Notice> : null}
-      {settings.loading || !settings.data ? (
+      {/* Only the first load shows the placeholder: a reload after saving would
+          otherwise unmount both forms and drop their "Saved" confirmation. */}
+      {!settings.data ? (
         <Panel>
           <LoadingBlock />
         </Panel>
@@ -281,6 +283,9 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
         ) : null}
         {save.error ? <Notice tone="danger">{save.error}</Notice> : null}
         {save.done ? <Notice tone="ok">{t("common.saved")}</Notice> : null}
+        {/* A refused test (nothing saved yet, bad input) answers with an error
+            instead of a result; without this the button seemed to do nothing. */}
+        {test.error ? <Notice tone="danger">{test.error}</Notice> : null}
         {testResult ? (
           testResult.ok ? (
             <Notice tone="ok">{t("admin.smtpTestSuccess")}</Notice>

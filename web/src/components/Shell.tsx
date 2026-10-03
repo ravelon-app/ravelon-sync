@@ -120,7 +120,7 @@ export function Shell() {
                   {personLabel(account.user)}
                 </span>
                 <span className="block truncate text-[11.5px] text-fg3">
-                  {isAdmin ? t("nav.admin") : account.user.email}
+                  {isAdmin ? t("admin.roleAdmin") : account.user.email}
                 </span>
               </span>
               <ChevronDown
