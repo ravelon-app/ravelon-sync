@@ -184,16 +184,18 @@ describe('legacy snapshot compatibility', () => {
       token: user.accessToken,
       body: {
         vaultId: 'legacy-vault',
-        items: [{
-          id: 'seed',
-          vaultId: 'legacy-vault',
-          itemType: 'Host',
-          ciphertext: 'b64:c2VlZC1jaXBoZXJ0ZXh0LWJ5dGVz',
-          nonce: 'bm9uY2UtYnl0ZXM=',
-          schemaVersion: 1,
-          clientRevision: 1,
-          updatedAt: '2026-01-01T12:00:00.000Z',
-        }],
+        items: [
+          {
+            id: 'seed',
+            vaultId: 'legacy-vault',
+            itemType: 'Host',
+            ciphertext: 'b64:c2VlZC1jaXBoZXJ0ZXh0LWJ5dGVz',
+            nonce: 'bm9uY2UtYnl0ZXM=',
+            schemaVersion: 1,
+            clientRevision: 1,
+            updatedAt: '2026-01-01T12:00:00.000Z',
+          },
+        ],
       },
     });
 

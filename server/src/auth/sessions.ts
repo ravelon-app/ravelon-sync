@@ -52,23 +52,27 @@ export async function issueSession(
   const expiresAt = new Date(Date.now() + config.refreshTokenTtlDays * 86_400_000).toISOString();
 
   await db.transaction(async () => {
-    await db.prepare(
-      `INSERT INTO devices (id, user_id, name, platform, last_seen_at, last_ip, mfa_verified_at, created_at)
+    await db
+      .prepare(
+        `INSERT INTO devices (id, user_id, name, platform, last_seen_at, last_ip, mfa_verified_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      deviceId,
-      userId,
-      deviceName.trim() || 'Ravelon',
-      platform.trim() || 'web',
-      now,
-      options.ip ?? null,
-      options.mfaVerified ? now : null,
-      now,
-    );
-    await db.prepare(
-      `INSERT INTO refresh_tokens (id, user_id, device_id, token_hash, expires_at, created_at)
+      )
+      .run(
+        deviceId,
+        userId,
+        deviceName.trim() || 'Ravelon',
+        platform.trim() || 'web',
+        now,
+        options.ip ?? null,
+        options.mfaVerified ? now : null,
+        now,
+      );
+    await db
+      .prepare(
+        `INSERT INTO refresh_tokens (id, user_id, device_id, token_hash, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(newId(), userId, deviceId, sha256(refreshToken), expiresAt, now);
+      )
+      .run(newId(), userId, deviceId, sha256(refreshToken), expiresAt, now);
     await db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, userId);
   })();
 
@@ -100,7 +104,8 @@ export async function rotateRefreshToken(
 ): Promise<IssuedSession> {
   const tokenHash = sha256(refreshToken);
   const outcome = await db.transaction(async () => {
-    const row = await db.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
+    const row = await db
+      .prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?')
       .get<RefreshTokenRow>(tokenHash);
     if (!row || Date.parse(row.expires_at) <= Date.now()) return { status: 'invalid' as const };
     if (row.revoked_at) {
@@ -121,17 +126,21 @@ export async function rotateRefreshToken(
     const expiresAt = new Date(Date.now() + config.refreshTokenTtlDays * 86_400_000).toISOString();
     // Claiming the row conditionally is what makes two concurrent refreshes
     // resolve to exactly one winner; the loser falls through to reuse.
-    const claimed = await db.prepare(
-      `UPDATE refresh_tokens SET revoked_at = ?, replaced_by = ?
+    const claimed = await db
+      .prepare(
+        `UPDATE refresh_tokens SET revoked_at = ?, replaced_by = ?
        WHERE id = ? AND revoked_at IS NULL AND expires_at > ?`,
-    ).run(now, newRowId, row.id, now);
+      )
+      .run(now, newRowId, row.id, now);
     if (claimed.changes !== 1) {
       return { status: 'reuse' as const, userId: row.user_id, deviceId: row.device_id };
     }
-    await db.prepare(
-      `INSERT INTO refresh_tokens (id, user_id, device_id, token_hash, expires_at, created_at)
+    await db
+      .prepare(
+        `INSERT INTO refresh_tokens (id, user_id, device_id, token_hash, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(newRowId, row.user_id, row.device_id, sha256(newToken), expiresAt, now);
+      )
+      .run(newRowId, row.user_id, row.device_id, sha256(newToken), expiresAt, now);
     await db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(now, row.device_id);
     await db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, row.user_id);
     return { status: 'ok' as const, row, user, newToken };
@@ -142,7 +151,14 @@ export async function rotateRefreshToken(
     // A replayed refresh token is the one signal of a stolen session this
     // server gets, so the operator and the account holder must be able to
     // see it. The token itself is never recorded.
-    await audit(db, outcome.userId, 'auth.refresh_reuse_detected', `device:${outcome.deviceId}`, null, options.ip ?? null);
+    await audit(
+      db,
+      outcome.userId,
+      'auth.refresh_reuse_detected',
+      `device:${outcome.deviceId}`,
+      null,
+      options.ip ?? null,
+    );
     throw new ApiError(401, 'refresh_token_reused', 'Session was revoked. Sign in again');
   }
   if (outcome.status === 'disabled') {
@@ -182,7 +198,8 @@ export const LIVE_DEVICE_SQL = `EXISTS (
 )`;
 
 export async function revokeDeviceSessions(db: AppDatabase, deviceId: string): Promise<void> {
-  await db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL')
+  await db
+    .prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL')
     .run(nowIso(), deviceId);
 }
 
@@ -192,17 +209,21 @@ export async function revokeAllSessions(
   exceptDeviceId?: string,
 ): Promise<void> {
   if (exceptDeviceId) {
-    await db.prepare(
-      'UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND device_id <> ? AND revoked_at IS NULL',
-    ).run(nowIso(), userId, exceptDeviceId);
+    await db
+      .prepare(
+        'UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND device_id <> ? AND revoked_at IS NULL',
+      )
+      .run(nowIso(), userId, exceptDeviceId);
     return;
   }
-  await db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL')
+  await db
+    .prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL')
     .run(nowIso(), userId);
 }
 
 export async function revokeSessionByRefreshToken(db: AppDatabase, refreshToken: string): Promise<void> {
-  const row = await db.prepare('SELECT device_id FROM refresh_tokens WHERE token_hash = ?')
+  const row = await db
+    .prepare('SELECT device_id FROM refresh_tokens WHERE token_hash = ?')
     .get<{ device_id: string }>(sha256(refreshToken));
   if (row) await revokeDeviceSessions(db, row.device_id);
 }
@@ -230,13 +251,16 @@ export async function requireAuth(
   if (!user) throw new ApiError(401, 'invalid_token', 'Access token is invalid or expired');
   if (user.disabled) throw new ApiError(403, 'account_disabled', 'This account is disabled');
 
-  const device = await db.prepare('SELECT * FROM devices WHERE id = ? AND user_id = ?')
+  const device = await db
+    .prepare('SELECT * FROM devices WHERE id = ? AND user_id = ?')
     .get<DeviceRow>(claims.deviceId, user.id);
   if (!device) throw new ApiError(401, 'device_revoked', 'This device was signed out');
 
-  const live = await db.prepare(
-    'SELECT id FROM refresh_tokens WHERE device_id = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1',
-  ).get(device.id, nowIso());
+  const live = await db
+    .prepare(
+      'SELECT id FROM refresh_tokens WHERE device_id = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1',
+    )
+    .get(device.id, nowIso());
   if (!live) throw new ApiError(401, 'device_revoked', 'This device was signed out');
 
   return { user, deviceId: device.id };
@@ -255,13 +279,10 @@ export async function requireAdmin(
 }
 
 /** Best-effort last-seen bookkeeping; never fails a request. */
-export async function touchDevice(
-  db: AppDatabase,
-  deviceId: string,
-  ip: string | null,
-): Promise<void> {
+export async function touchDevice(db: AppDatabase, deviceId: string, ip: string | null): Promise<void> {
   try {
-    await db.prepare('UPDATE devices SET last_seen_at = ?, last_ip = ? WHERE id = ?')
+    await db
+      .prepare('UPDATE devices SET last_seen_at = ?, last_ip = ? WHERE id = ?')
       .run(nowIso(), ip, deviceId);
   } catch {
     // Losing a timestamp is not worth failing the caller's request over.

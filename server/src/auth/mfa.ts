@@ -34,15 +34,17 @@ export async function startTotpEnrollment(
   secret: string,
 ): Promise<void> {
   const now = nowIso();
-  await db.prepare(
-    `INSERT INTO user_mfa (user_id, totp_secret_encrypted, totp_confirmed_at, last_totp_step, created_at, updated_at)
+  await db
+    .prepare(
+      `INSERT INTO user_mfa (user_id, totp_secret_encrypted, totp_confirmed_at, last_totp_step, created_at, updated_at)
      VALUES (?, ?, NULL, NULL, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        totp_secret_encrypted = excluded.totp_secret_encrypted,
        totp_confirmed_at = NULL,
        last_totp_step = NULL,
        updated_at = excluded.updated_at`,
-  ).run(userId, encryptSecret(config.mfaEncryptionKey, TOTP_PURPOSE, secret), now, now);
+    )
+    .run(userId, encryptSecret(config.mfaEncryptionKey, TOTP_PURPOSE, secret), now, now);
 }
 
 /**
@@ -64,9 +66,9 @@ export function decryptTotpSecret(config: Config, encrypted: string): string | n
 const MFA_SECRET_UNREADABLE = new ApiError(
   500,
   'mfa_secret_unreadable',
-  'This server cannot read its stored authenticator secrets. '
-  + 'MFA_ENCRYPTION_KEY does not match the one they were saved with. '
-  + 'Restore the original key, or have an administrator reset two-factor for this account',
+  'This server cannot read its stored authenticator secrets. ' +
+    'MFA_ENCRYPTION_KEY does not match the one they were saved with. ' +
+    'Restore the original key, or have an administrator reset two-factor for this account',
 );
 
 /**
@@ -96,14 +98,18 @@ export async function confirmTotpEnrollment(
   const codes = generateRecoveryCodes();
   const now = nowIso();
   await db.transaction(async () => {
-    await db.prepare(
-      'UPDATE user_mfa SET totp_confirmed_at = ?, last_totp_step = ?, updated_at = ? WHERE user_id = ?',
-    ).run(now, step, now, userId);
+    await db
+      .prepare(
+        'UPDATE user_mfa SET totp_confirmed_at = ?, last_totp_step = ?, updated_at = ? WHERE user_id = ?',
+      )
+      .run(now, step, now, userId);
     await db.prepare('DELETE FROM mfa_recovery_codes WHERE user_id = ?').run(userId);
     for (const recoveryCode of codes) {
-      await db.prepare(
-        'INSERT INTO mfa_recovery_codes (id, user_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)',
-      ).run(newId(), userId, hashRecoveryCode(config, recoveryCode), now);
+      await db
+        .prepare(
+          'INSERT INTO mfa_recovery_codes (id, user_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)',
+        )
+        .run(newId(), userId, hashRecoveryCode(config, recoveryCode), now);
     }
   })();
   return codes;
@@ -119,9 +125,11 @@ export async function regenerateRecoveryCodes(
   await db.transaction(async () => {
     await db.prepare('DELETE FROM mfa_recovery_codes WHERE user_id = ?').run(userId);
     for (const code of codes) {
-      await db.prepare(
-        'INSERT INTO mfa_recovery_codes (id, user_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)',
-      ).run(newId(), userId, hashRecoveryCode(config, code), now);
+      await db
+        .prepare(
+          'INSERT INTO mfa_recovery_codes (id, user_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)',
+        )
+        .run(newId(), userId, hashRecoveryCode(config, code), now);
     }
   })();
   return codes;
@@ -136,9 +144,9 @@ export async function disableMfa(db: AppDatabase, userId: string): Promise<void>
 }
 
 export async function countUnusedRecoveryCodes(db: AppDatabase, userId: string): Promise<number> {
-  const row = await db.prepare(
-    'SELECT COUNT(*) AS count FROM mfa_recovery_codes WHERE user_id = ? AND used_at IS NULL',
-  ).get<{ count: number }>(userId);
+  const row = await db
+    .prepare('SELECT COUNT(*) AS count FROM mfa_recovery_codes WHERE user_id = ? AND used_at IS NULL')
+    .get<{ count: number }>(userId);
   return Number(row?.count ?? 0);
 }
 
@@ -155,14 +163,15 @@ export async function issueMfaChallenge(
   deviceName: string,
   platform: string,
 ): Promise<MfaChallenge> {
-  await db.prepare('DELETE FROM mfa_challenges WHERE expires_at <= ? OR used_at IS NOT NULL')
-    .run(nowIso());
+  await db.prepare('DELETE FROM mfa_challenges WHERE expires_at <= ? OR used_at IS NOT NULL').run(nowIso());
   const challengeToken = randomToken('mch');
   const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS).toISOString();
-  await db.prepare(
-    `INSERT INTO mfa_challenges (id, user_id, challenge_hash, device_name, platform, expires_at, used_at, created_at)
+  await db
+    .prepare(
+      `INSERT INTO mfa_challenges (id, user_id, challenge_hash, device_name, platform, expires_at, used_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
-  ).run(newId(), userId, sha256(challengeToken), deviceName, platform, expiresAt, nowIso());
+    )
+    .run(newId(), userId, sha256(challengeToken), deviceName, platform, expiresAt, nowIso());
   return { mfaRequired: true, challengeToken, expiresAt };
 }
 
@@ -184,7 +193,8 @@ export async function completeMfaChallenge(
   code: string,
 ): Promise<CompletedChallenge> {
   const challengeHash = sha256(challengeToken);
-  const challenge = await db.prepare('SELECT * FROM mfa_challenges WHERE challenge_hash = ?')
+  const challenge = await db
+    .prepare('SELECT * FROM mfa_challenges WHERE challenge_hash = ?')
     .get<MfaChallengeRow>(challengeHash);
   if (!challenge || challenge.used_at || Date.parse(challenge.expires_at) <= Date.now()) {
     throw new ApiError(400, 'invalid_mfa_challenge', 'This sign-in attempt expired. Start again');
@@ -193,9 +203,9 @@ export async function completeMfaChallenge(
   const factor = await verifySecondFactor(db, config, challenge.user_id, code);
   if (!factor) throw new ApiError(400, 'invalid_mfa_code', 'That code is not valid');
 
-  const claimed = await db.prepare(
-    'UPDATE mfa_challenges SET used_at = ? WHERE id = ? AND used_at IS NULL',
-  ).run(nowIso(), challenge.id);
+  const claimed = await db
+    .prepare('UPDATE mfa_challenges SET used_at = ? WHERE id = ? AND used_at IS NULL')
+    .run(nowIso(), challenge.id);
   if (claimed.changes !== 1) {
     throw new ApiError(400, 'invalid_mfa_challenge', 'This sign-in attempt expired. Start again');
   }
@@ -226,18 +236,22 @@ export async function verifySecondFactor(
   if (step !== null) {
     // Conditional on the step still being the one we read, so two requests
     // with the same code cannot both be accepted.
-    const claimed = await db.prepare(
-      `UPDATE user_mfa SET last_totp_step = ?, updated_at = ?
+    const claimed = await db
+      .prepare(
+        `UPDATE user_mfa SET last_totp_step = ?, updated_at = ?
        WHERE user_id = ? AND (last_totp_step IS NULL OR last_totp_step < ?)`,
-    ).run(step, nowIso(), userId, step);
+      )
+      .run(step, nowIso(), userId, step);
     return claimed.changes === 1 ? 'totp' : null;
   }
 
   const normalized = normalizeRecoveryCode(code);
   if (normalized.length < 8) return null;
-  const spent = await db.prepare(
-    'UPDATE mfa_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL',
-  ).run(nowIso(), userId, hashRecoveryCode(config, normalized));
+  const spent = await db
+    .prepare(
+      'UPDATE mfa_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL',
+    )
+    .run(nowIso(), userId, hashRecoveryCode(config, normalized));
   return spent.changes === 1 ? 'recovery' : null;
 }
 

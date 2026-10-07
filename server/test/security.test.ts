@@ -8,14 +8,7 @@ import { after, before, describe, test } from 'node:test';
 import { totpCodeAtStep } from '../src/auth/totp.js';
 import { ConfigError, loadConfig, newId, nowIso } from '../src/config.js';
 import { sha256 } from '../src/lib/crypto.js';
-import {
-  api,
-  login,
-  register,
-  startTestServer,
-  type TestAccount,
-  type TestServer,
-} from './helpers.js';
+import { api, login, register, startTestServer, type TestAccount, type TestServer } from './helpers.js';
 
 const PASSWORD = 'correct-horse-battery-staple';
 
@@ -59,16 +52,19 @@ async function openRegistration(server: TestServer, admin: TestAccount, extra: R
 }
 
 async function auditRows(server: TestServer, action: string) {
-  return await server.db.prepare('SELECT * FROM audit_log WHERE action = ? ORDER BY created_at')
+  return await server.db
+    .prepare('SELECT * FROM audit_log WHERE action = ? ORDER BY created_at')
     .all<{ actor_user_id: string | null; target: string | null; detail_json: string | null }>(action);
 }
 
 /** Inserts a reset token the test knows, since the real one only travels by mail. */
 async function insertResetToken(server: TestServer, userId: string, token: string): Promise<void> {
-  await server.db.prepare(
-    `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+  await server.db
+    .prepare(
+      `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
      VALUES (?, ?, ?, ?, NULL, ?)`,
-  ).run(newId(), userId, sha256(token), new Date(Date.now() + 3_600_000).toISOString(), nowIso());
+    )
+    .run(newId(), userId, sha256(token), new Date(Date.now() + 3_600_000).toISOString(), nowIso());
 }
 
 describe('public origin for emailed links', () => {
@@ -77,11 +73,14 @@ describe('public origin for emailed links', () => {
       NODE_ENV: 'production',
       SYNC_JWT_SECRET: 'a-production-secret-with-plenty-of-entropy-0123456789',
     };
-    assert.throws(() => loadConfig(env as NodeJS.ProcessEnv), (error: unknown) => {
-      assert.ok(error instanceof ConfigError);
-      assert.match(error.message, /PUBLIC_URL is required in production/);
-      return true;
-    });
+    assert.throws(
+      () => loadConfig(env as NodeJS.ProcessEnv),
+      (error: unknown) => {
+        assert.ok(error instanceof ConfigError);
+        assert.match(error.message, /PUBLIC_URL is required in production/);
+        return true;
+      },
+    );
     const config = loadConfig({ ...env, PUBLIC_URL: 'https://sync.example.com' } as NodeJS.ProcessEnv);
     assert.equal(config.publicUrl, 'https://sync.example.com');
   });
@@ -100,10 +99,7 @@ describe('public origin for emailed links', () => {
         },
       });
       assert.equal(invite.status, 201);
-      assert.ok(
-        invite.body.inviteUrl.startsWith('http://sync.local/signup?invite='),
-        invite.body.inviteUrl,
-      );
+      assert.ok(invite.body.inviteUrl.startsWith('http://sync.local/signup?invite='), invite.body.inviteUrl);
     } finally {
       await server.close();
     }
@@ -438,7 +434,8 @@ describe('account deletion and team data', () => {
       body: { password: PASSWORD },
     });
     assert.equal(response.status, 204);
-    const vault = await server.db.prepare('SELECT user_id FROM vaults WHERE id = ?')
+    const vault = await server.db
+      .prepare('SELECT user_id FROM vaults WHERE id = ?')
       .get<{ user_id: string }>(adminVaultId);
     assert.equal(vault?.user_id, owner.userId);
   });
@@ -449,15 +446,20 @@ describe('account deletion and team data', () => {
       body: { userId: heir.userId },
     });
     assert.equal(transferred.status, 200);
-    const owners = await server.db.prepare('SELECT DISTINCT user_id FROM vaults WHERE team_id = ?')
+    const owners = await server.db
+      .prepare('SELECT DISTINCT user_id FROM vaults WHERE team_id = ?')
       .all<{ user_id: string }>(teamId);
-    assert.deepEqual(owners.map((row) => row.user_id), [heir.userId]);
+    assert.deepEqual(
+      owners.map((row) => row.user_id),
+      [heir.userId],
+    );
 
     const deleted = await api(server, 'DELETE', `/v1/admin/users/${owner.userId}`, {
       token: admin.accessToken,
     });
     assert.equal(deleted.status, 204);
-    const vaults = await server.db.prepare('SELECT COUNT(*) AS count FROM vaults WHERE team_id = ?')
+    const vaults = await server.db
+      .prepare('SELECT COUNT(*) AS count FROM vaults WHERE team_id = ?')
       .get<{ count: number }>(teamId);
     assert.equal(Number(vaults?.count), 2);
   });
@@ -675,10 +677,11 @@ describe('audit trail', () => {
     });
     const rows = await auditRows(server, 'admin.settings_platform');
     const detail = JSON.parse(String(rows.at(-1)?.detail_json));
-    assert.deepEqual(
-      [...detail.changed].sort(),
-      ['allowTeamCreation', 'requireEmailVerification', 'serverName'],
-    );
+    assert.deepEqual([...detail.changed].sort(), [
+      'allowTeamCreation',
+      'requireEmailVerification',
+      'serverName',
+    ]);
     assert.equal(detail.values.requireEmailVerification, true);
   });
 });

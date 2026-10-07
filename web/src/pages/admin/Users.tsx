@@ -76,7 +76,11 @@ export function AdminUsers() {
         </Select>
       </div>
 
-      {users.error ? <Notice tone="danger" className="mb-4">{users.error}</Notice> : null}
+      {users.error ? (
+        <Notice tone="danger" className="mb-4">
+          {users.error}
+        </Notice>
+      ) : null}
 
       <Panel>
         {users.loading ? (
@@ -275,7 +279,9 @@ function UserActionsDialog({
               <Button
                 variant="danger"
                 loading={pending}
-                onClick={() => void act(() => api.delete(`/v1/admin/users/${encodeURIComponent(user.id)}/mfa`))}
+                onClick={() =>
+                  void act(() => api.delete(`/v1/admin/users/${encodeURIComponent(user.id)}/mfa`))
+                }
               >
                 {t("admin.userResetMfa")}
               </Button>

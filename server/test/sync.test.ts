@@ -114,11 +114,13 @@ describe('encrypted sync', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('host-4', vaultId, {
-          baseRevision: revision - 1,
-          clientRevision: 2,
-          ciphertext: fakeCiphertext('host-4-other'),
-        })],
+        items: [
+          syncItem('host-4', vaultId, {
+            baseRevision: revision - 1,
+            clientRevision: 2,
+            ciphertext: fakeCiphertext('host-4-other'),
+          }),
+        ],
       },
     });
     assert.equal(conflict.body.results[0].status, 'conflict');
@@ -139,11 +141,13 @@ describe('encrypted sync', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('host-4', vaultId, {
-          baseRevision: host4.revision,
-          clientRevision: 2,
-          ciphertext: fakeCiphertext('host-4-v2'),
-        })],
+        items: [
+          syncItem('host-4', vaultId, {
+            baseRevision: host4.revision,
+            clientRevision: 2,
+            ciphertext: fakeCiphertext('host-4-v2'),
+          }),
+        ],
       },
     });
     assert.equal(response.body.results[0].status, 'stored');
@@ -154,10 +158,12 @@ describe('encrypted sync', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('host-2', vaultId, {
-          clientRevision: 9,
-          deletedAt: '2026-02-01T12:00:00.000Z',
-        })],
+        items: [
+          syncItem('host-2', vaultId, {
+            clientRevision: 9,
+            deletedAt: '2026-02-01T12:00:00.000Z',
+          }),
+        ],
       },
     });
     const pulled = await api(server, 'GET', `/v1/sync/pull?vaultId=${vaultId}&cursor=0`, {
@@ -173,9 +179,11 @@ describe('encrypted sync', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('leak', vaultId, {
-          ciphertext: JSON.stringify({ hostname: 'db.internal', password: 'hunter2' }),
-        })],
+        items: [
+          syncItem('leak', vaultId, {
+            ciphertext: JSON.stringify({ hostname: 'db.internal', password: 'hunter2' }),
+          }),
+        ],
       },
     });
     assert.equal(response.status, 400);
@@ -304,10 +312,15 @@ describe('vault key material', () => {
     assert.deepEqual(read.body.material, material);
   });
 
-
   test('a first device can ask to create the envelope only if none exists', async () => {
     const first = { version: 1, purpose: 'ravelon-account-key-v1', salt: 's', nonce: 'n1', ciphertext: 'c1' };
-    const second = { version: 1, purpose: 'ravelon-account-key-v1', salt: 's', nonce: 'n2', ciphertext: 'c2' };
+    const second = {
+      version: 1,
+      purpose: 'ravelon-account-key-v1',
+      salt: 's',
+      nonce: 'n2',
+      ciphertext: 'c2',
+    };
     // The personal vault exists from registration; a client-chosen id only
     // comes into being with the first push.
     const me = await api(server, 'GET', '/v1/account/me', { token: user.accessToken });
@@ -358,25 +371,54 @@ test('VNC TLS and Apple settings survive self-hosted encrypted sync', async () =
   try {
     const user = await register(server, 'vnc-roundtrip@example.test');
     for (const security of ['x509', 'anonymousTls', 'apple']) {
-    const host = { protocol: 'vnc', address: 'desktop.example.test', username: 'fixture-user', secret: 'synthetic-password', jumpHostId: 'ssh-gateway', vnc: { security, tlsServerName: 'desktop.example.test', caCertificate: 'public CA fixture', allowUnauthenticated: false } };
-    const key = randomBytes(32);
-    const nonce = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, nonce);
-    const ciphertext = Buffer.concat([cipher.update(JSON.stringify(host)), cipher.final(), cipher.getAuthTag()]).toString('base64');
-    const record = syncItem(`vnc-${security}`, 'vnc-vault', { ciphertext, nonce: nonce.toString('base64') });
-    const push = await api(server, 'POST', '/v1/sync/push', { token: user.accessToken, body: { vaultId: 'vnc-vault', items: [record] } });
-    assert.equal(push.status, 200);
-    const pull = await api(server, 'GET', '/v1/sync/pull?vaultId=vnc-vault&cursor=0', { token: user.accessToken });
-    assert.equal(pull.status, 200);
-    const item = pull.body.items.find((entry: { id: string }) => entry.id === record.id);
-    assert.equal(item.ciphertext, ciphertext);
-    assert.equal(item.nonce, nonce.toString('base64'));
-    assert.equal(JSON.stringify(item).includes(host.secret), false);
-    assert.equal(JSON.stringify(item).includes(host.address), false);
-    const bytes = Buffer.from(item.ciphertext, 'base64');
-    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(item.nonce, 'base64'));
-    decipher.setAuthTag(bytes.subarray(-16));
-    assert.deepEqual(JSON.parse(Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]).toString()), host);
+      const host = {
+        protocol: 'vnc',
+        address: 'desktop.example.test',
+        username: 'fixture-user',
+        secret: 'synthetic-password',
+        jumpHostId: 'ssh-gateway',
+        vnc: {
+          security,
+          tlsServerName: 'desktop.example.test',
+          caCertificate: 'public CA fixture',
+          allowUnauthenticated: false,
+        },
+      };
+      const key = randomBytes(32);
+      const nonce = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', key, nonce);
+      const ciphertext = Buffer.concat([
+        cipher.update(JSON.stringify(host)),
+        cipher.final(),
+        cipher.getAuthTag(),
+      ]).toString('base64');
+      const record = syncItem(`vnc-${security}`, 'vnc-vault', {
+        ciphertext,
+        nonce: nonce.toString('base64'),
+      });
+      const push = await api(server, 'POST', '/v1/sync/push', {
+        token: user.accessToken,
+        body: { vaultId: 'vnc-vault', items: [record] },
+      });
+      assert.equal(push.status, 200);
+      const pull = await api(server, 'GET', '/v1/sync/pull?vaultId=vnc-vault&cursor=0', {
+        token: user.accessToken,
+      });
+      assert.equal(pull.status, 200);
+      const item = pull.body.items.find((entry: { id: string }) => entry.id === record.id);
+      assert.equal(item.ciphertext, ciphertext);
+      assert.equal(item.nonce, nonce.toString('base64'));
+      assert.equal(JSON.stringify(item).includes(host.secret), false);
+      assert.equal(JSON.stringify(item).includes(host.address), false);
+      const bytes = Buffer.from(item.ciphertext, 'base64');
+      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(item.nonce, 'base64'));
+      decipher.setAuthTag(bytes.subarray(-16));
+      assert.deepEqual(
+        JSON.parse(Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]).toString()),
+        host,
+      );
     }
-  } finally { await server.close(); }
+  } finally {
+    await server.close();
+  }
 });

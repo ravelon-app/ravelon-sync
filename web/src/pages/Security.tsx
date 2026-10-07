@@ -134,10 +134,7 @@ export function Security() {
         requireMfa
         submitLabel={t("security.recoveryRegenerate")}
         onSubmit={async (body) => {
-          const result = await api.post<{ recoveryCodes: string[] }>(
-            "/v1/account/mfa/recovery-codes",
-            body,
-          );
+          const result = await api.post<{ recoveryCodes: string[] }>("/v1/account/mfa/recovery-codes", body);
           setRegenerating(false);
           setCodes(result.recoveryCodes);
           await refresh();

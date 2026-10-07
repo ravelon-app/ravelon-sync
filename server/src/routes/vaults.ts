@@ -38,12 +38,14 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
     const auth = await requireAuth(db, config, request);
     const vaults = await listAccessibleVaults(db, auth.user.id);
     return {
-      vaults: await Promise.all(vaults.map(async (vault) => ({
-        ...publicVault(vault),
-        itemCount: await countItems(context, vault.id),
-        storageBytes: await vaultStorageBytes(db, vault.id),
-        cursor: String(await vaultCursor(db, vault.id)),
-      }))),
+      vaults: await Promise.all(
+        vaults.map(async (vault) => ({
+          ...publicVault(vault),
+          itemCount: await countItems(context, vault.id),
+          storageBytes: await vaultStorageBytes(db, vault.id),
+          cursor: String(await vaultCursor(db, vault.id)),
+        })),
+      ),
     };
   });
 
@@ -53,33 +55,35 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
     await assertNotInMaintenance(context);
     await assertVaultCreationAvailable(db, config, auth.user.id);
 
-    const body = z.object({
-      name: vaultNameSchema,
-      kind: z.enum(['personal', 'team']).default('personal'),
-      teamId: z.string().min(1).max(160).nullish(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        name: vaultNameSchema,
+        kind: z.enum(['personal', 'team']).default('personal'),
+        teamId: z.string().min(1).max(160).nullish(),
+      })
+      .parse(request.body);
 
     if (body.kind === 'team' && !body.teamId) {
       throw new ApiError(400, 'team_required', 'A team vault needs a team');
     }
-    const team = body.kind === 'team'
-      ? await requireTeamAdmin(db, auth.user.id, body.teamId!)
-      : null;
+    const team = body.kind === 'team' ? await requireTeamAdmin(db, auth.user.id, body.teamId!) : null;
 
     const vaultId = newId();
     const now = nowIso();
     await db.transaction(async () => {
-      await db.prepare(
-        `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
+      await db
+        .prepare(
+          `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(vaultId, auth.user.id, body.name, body.kind, team?.id ?? null, auth.user.id, now, now);
+        )
+        .run(vaultId, auth.user.id, body.name, body.kind, team?.id ?? null, auth.user.id, now, now);
 
       if (team) {
         // Everyone already in the team gets the role their membership names,
         // so a new team vault is usable without a second round of invitations.
-        const members = await db.prepare(
-          'SELECT user_id, default_vault_role FROM team_members WHERE team_id = ?',
-        ).all<{ user_id: string; default_vault_role: VaultRole }>(team.id);
+        const members = await db
+          .prepare('SELECT user_id, default_vault_role FROM team_members WHERE team_id = ?')
+          .all<{ user_id: string; default_vault_role: VaultRole }>(team.id);
         for (const member of members) {
           await ensureVaultMember(db, vaultId, member.user_id, member.default_vault_role);
         }
@@ -89,11 +93,18 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
       }
     })();
 
-    await audit(db, auth.user.id, 'vault.create', `vault:${vaultId}`, {
-      name: body.name,
-      kind: body.kind,
-      teamId: team?.id ?? null,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'vault.create',
+      `vault:${vaultId}`,
+      {
+        name: body.name,
+        kind: body.kind,
+        teamId: team?.id ?? null,
+      },
+      clientIp(request),
+    );
     return reply.code(201).send(publicVault((await getVaultAccess(db, auth.user.id, vaultId))!));
   });
 
@@ -105,9 +116,17 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
       throw new ApiError(403, 'vault_admin_required', 'Vault administrator access is required');
     }
     const body = z.object({ name: vaultNameSchema }).parse(request.body);
-    await db.prepare('UPDATE vaults SET name = ?, updated_at = ? WHERE id = ?')
+    await db
+      .prepare('UPDATE vaults SET name = ?, updated_at = ? WHERE id = ?')
       .run(body.name, nowIso(), vault.id);
-    await audit(db, auth.user.id, 'vault.rename', `vault:${vault.id}`, { name: body.name }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'vault.rename',
+      `vault:${vault.id}`,
+      { name: body.name },
+      clientIp(request),
+    );
     return publicVault((await getVaultAccess(db, auth.user.id, vault.id))!);
   });
 
@@ -127,10 +146,12 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
     // with it, and the next device would mint a different secret than the
     // devices already signed in.
     if (vault.kind === 'personal') {
-      const primary = await db.prepare(
-        `SELECT id FROM vaults WHERE user_id = ? AND kind = 'personal'
+      const primary = await db
+        .prepare(
+          `SELECT id FROM vaults WHERE user_id = ? AND kind = 'personal'
          ORDER BY created_at ASC, id ASC LIMIT 1`,
-      ).get<{ id: string }>(auth.user.id);
+        )
+        .get<{ id: string }>(auth.user.id);
       if (primary?.id === vault.id) {
         throw new ApiError(
           409,
@@ -139,10 +160,17 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
         );
       }
     }
-    await audit(db, auth.user.id, 'vault.delete', `vault:${vault.id}`, {
-      name: vault.name,
-      items: await countItems(context, vault.id),
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'vault.delete',
+      `vault:${vault.id}`,
+      {
+        name: vault.name,
+        items: await countItems(context, vault.id),
+      },
+      clientIp(request),
+    );
     // Cascades take the encrypted records, versions, memberships and key
     // material with it. Nothing recoverable is left behind on purpose.
     await db.prepare('DELETE FROM vaults WHERE id = ?').run(vault.id);
@@ -158,18 +186,22 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
   app.patch('/v1/vaults/:id/members/:userId', async (request) => {
     const auth = await requireAuth(db, config, request);
     await assertNotInMaintenance(context);
-    const { id, userId } = z.object({
-      id: z.string().min(1).max(160),
-      userId: z.string().min(1).max(160),
-    }).parse(request.params);
+    const { id, userId } = z
+      .object({
+        id: z.string().min(1).max(160),
+        userId: z.string().min(1).max(160),
+      })
+      .parse(request.params);
     const vault = await requireVaultAccess(db, auth.user.id, id);
     if (!vaultRoleCanAdmin(vault.member_role)) {
       throw new ApiError(403, 'vault_admin_required', 'Vault administrator access is required');
     }
-    const body = z.object({ role: z.enum(VAULT_ROLES as unknown as [VaultRole, ...VaultRole[]]) })
+    const body = z
+      .object({ role: z.enum(VAULT_ROLES as unknown as [VaultRole, ...VaultRole[]]) })
       .parse(request.body);
 
-    const target = await db.prepare('SELECT role FROM vault_members WHERE vault_id = ? AND user_id = ?')
+    const target = await db
+      .prepare('SELECT role FROM vault_members WHERE vault_id = ? AND user_id = ?')
       .get<{ role: VaultRole }>(vault.id, userId);
     if (!target) throw new ApiError(404, 'member_not_found', 'That account is not a member of this vault');
     // Only an owner may hand out or take away ownership; an admin must not be
@@ -182,26 +214,36 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
     }
 
     await ensureVaultMember(db, vault.id, userId, body.role);
-    await audit(db, auth.user.id, 'vault.member_role', `vault:${vault.id}`, {
-      userId,
-      role: body.role,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'vault.member_role',
+      `vault:${vault.id}`,
+      {
+        userId,
+        role: body.role,
+      },
+      clientIp(request),
+    );
     return { members: await listVaultMembers(context, vault.id) };
   });
 
   app.delete('/v1/vaults/:id/members/:userId', async (request, reply) => {
     const auth = await requireAuth(db, config, request);
     await assertNotInMaintenance(context);
-    const { id, userId } = z.object({
-      id: z.string().min(1).max(160),
-      userId: z.string().min(1).max(160),
-    }).parse(request.params);
+    const { id, userId } = z
+      .object({
+        id: z.string().min(1).max(160),
+        userId: z.string().min(1).max(160),
+      })
+      .parse(request.params);
     const vault = await requireVaultAccess(db, auth.user.id, id);
     // Leaving on your own needs no privilege; removing somebody else does.
     if (userId !== auth.user.id && !vaultRoleCanAdmin(vault.member_role)) {
       throw new ApiError(403, 'vault_admin_required', 'Vault administrator access is required');
     }
-    const target = await db.prepare('SELECT role FROM vault_members WHERE vault_id = ? AND user_id = ?')
+    const target = await db
+      .prepare('SELECT role FROM vault_members WHERE vault_id = ? AND user_id = ?')
       .get<{ role: VaultRole }>(vault.id, userId);
     if (!target) throw new ApiError(404, 'member_not_found', 'That account is not a member of this vault');
     if (target.role === 'owner') {
@@ -220,18 +262,22 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
    */
   app.get('/v1/vaults/:id/items/:itemId/versions', async (request) => {
     const auth = await requireAuth(db, config, request);
-    const { id, itemId } = z.object({
-      id: z.string().min(1).max(160),
-      itemId: z.string().min(1).max(160),
-    }).parse(request.params);
+    const { id, itemId } = z
+      .object({
+        id: z.string().min(1).max(160),
+        itemId: z.string().min(1).max(160),
+      })
+      .parse(request.params);
     const vault = await requireVaultAccess(db, auth.user.id, id);
-    const rows = await db.prepare(
-      `SELECT id, item_type, schema_version, client_revision, updated_at, deleted_at,
+    const rows = await db
+      .prepare(
+        `SELECT id, item_type, schema_version, client_revision, updated_at, deleted_at,
               restored_at, version_cursor, stored_at, device_id, reason
        FROM sync_item_versions
        WHERE vault_id = ? AND item_id = ?
        ORDER BY version_cursor DESC`,
-    ).all<Record<string, unknown>>(vault.id, itemId);
+      )
+      .all<Record<string, unknown>>(vault.id, itemId);
     return {
       versions: rows.map((row) => ({
         id: row.id,
@@ -259,10 +305,12 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
   app.post('/v1/vaults/:id/items/:itemId/restore', async (request) => {
     const auth = await requireAuth(db, config, request);
     await assertNotInMaintenance(context);
-    const { id, itemId } = z.object({
-      id: z.string().min(1).max(160),
-      itemId: z.string().min(1).max(160),
-    }).parse(request.params);
+    const { id, itemId } = z
+      .object({
+        id: z.string().min(1).max(160),
+        itemId: z.string().min(1).max(160),
+      })
+      .parse(request.params);
     const body = z.object({ versionId: z.string().min(1).max(160) }).parse(request.body);
 
     const vault = await requireVaultAccess(db, auth.user.id, id);
@@ -278,10 +326,17 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
       auth.deviceId,
       'restore',
     );
-    await audit(db, auth.user.id, 'vault.item_restore', `vault:${vault.id}`, {
-      itemId,
-      versionId: body.versionId,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'vault.item_restore',
+      `vault:${vault.id}`,
+      {
+        itemId,
+        versionId: body.versionId,
+      },
+      clientIp(request),
+    );
     syncEvents.publish({
       type: 'vaultChanged',
       vaultId: vault.id,
@@ -306,25 +361,26 @@ export async function restoreSyncVersion(
 
   return await db.transaction(async () => {
     await lockSection(db, 'vault_storage');
-    const version = await db.prepare(
-      'SELECT * FROM sync_item_versions WHERE id = ? AND vault_id = ? AND item_id = ?',
-    ).get<Record<string, unknown>>(versionId, vaultId, itemId);
+    const version = await db
+      .prepare('SELECT * FROM sync_item_versions WHERE id = ? AND vault_id = ? AND item_id = ?')
+      .get<Record<string, unknown>>(versionId, vaultId, itemId);
     if (!version) throw new ApiError(404, 'version_not_found', 'That version does not exist');
 
     // The restored copy must outrank whatever it replaces for clients that
     // still resolve pushes by last writer wins; carrying the old revision over
     // let any device holding the newer copy overwrite the restore again.
-    const replaced = await db.prepare(
-      'SELECT client_revision FROM sync_items WHERE vault_id = ? AND item_id = ?',
-    ).get<{ client_revision: number }>(vaultId, itemId);
+    const replaced = await db
+      .prepare('SELECT client_revision FROM sync_items WHERE vault_id = ? AND item_id = ?')
+      .get<{ client_revision: number }>(vaultId, itemId);
     const clientRevision = Math.max(
       Number(version.client_revision),
       replaced ? Number(replaced.client_revision) + 1 : 0,
     );
 
     const cursor = await nextCursor(db);
-    await db.prepare(
-      `INSERT INTO sync_items
+    await db
+      .prepare(
+        `INSERT INTO sync_items
         (vault_id, item_id, item_type, ciphertext, nonce, schema_version,
          client_revision, updated_at, deleted_at, restored_at, cursor, stored_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -339,53 +395,63 @@ export async function restoreSyncVersion(
          restored_at = excluded.restored_at,
          cursor = excluded.cursor,
          stored_at = excluded.stored_at`,
-    ).run(
-      vaultId,
-      itemId,
-      version.item_type,
-      version.ciphertext,
-      version.nonce,
-      version.schema_version,
-      clientRevision,
-      version.updated_at,
-      version.deleted_at ?? null,
-      restoredAt,
-      cursor,
-      restoredAt,
+      )
+      .run(
+        vaultId,
+        itemId,
+        version.item_type,
+        version.ciphertext,
+        version.nonce,
+        version.schema_version,
+        clientRevision,
+        version.updated_at,
+        version.deleted_at ?? null,
+        restoredAt,
+        cursor,
+        restoredAt,
+      );
+
+    await insertSyncVersion(
+      db,
+      {
+        vaultId,
+        itemId,
+        itemType: String(version.item_type),
+        ciphertext: String(version.ciphertext),
+        nonce: String(version.nonce),
+        schemaVersion: Number(version.schema_version),
+        clientRevision,
+        updatedAt: String(version.updated_at),
+        deletedAt: (version.deleted_at as string | null) ?? null,
+        restoredAt,
+        versionCursor: cursor,
+        storedAt: restoredAt,
+        actorUserId,
+        deviceId,
+        reason,
+      },
+      platform.itemVersionsKept,
     );
 
-    await insertSyncVersion(db, {
-      vaultId,
-      itemId,
-      itemType: String(version.item_type),
-      ciphertext: String(version.ciphertext),
-      nonce: String(version.nonce),
-      schemaVersion: Number(version.schema_version),
-      clientRevision,
-      updatedAt: String(version.updated_at),
-      deletedAt: (version.deleted_at as string | null) ?? null,
-      restoredAt,
-      versionCursor: cursor,
-      storedAt: restoredAt,
-      actorUserId,
-      deviceId,
-      reason,
-    }, platform.itemVersionsKept);
-
-    const row = await db.prepare('SELECT * FROM sync_items WHERE vault_id = ? AND item_id = ?')
+    const row = await db
+      .prepare('SELECT * FROM sync_items WHERE vault_id = ? AND item_id = ?')
       .get<SyncItemRow>(vaultId, itemId);
     return { restored: true, item: row ? publicSyncItem(row) : null };
   })();
 }
 
 async function listVaultMembers(context: RouteContext, vaultId: string) {
-  const rows = await context.db.prepare(
-    `SELECT u.id, u.email, u.display_name, u.disabled, vm.role, vm.created_at
+  const rows = await context.db
+    .prepare(
+      `SELECT u.id, u.email, u.display_name, u.disabled, vm.role, vm.created_at
      FROM vault_members vm
      JOIN users u ON u.id = vm.user_id
      WHERE vm.vault_id = ?
      ORDER BY vm.created_at ASC`,
-  ).all<Pick<UserRow, 'id' | 'email' | 'display_name' | 'disabled'> & { role: string; created_at: string }>(vaultId);
+    )
+    .all<Pick<UserRow, 'id' | 'email' | 'display_name' | 'disabled'> & { role: string; created_at: string }>(
+      vaultId,
+    );
   return rows.map((row) => ({
     id: row.id,
     email: row.email,
@@ -397,8 +463,8 @@ async function listVaultMembers(context: RouteContext, vaultId: string) {
 }
 
 async function countItems(context: RouteContext, vaultId: string): Promise<number> {
-  const row = await context.db.prepare(
-    'SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ? AND deleted_at IS NULL',
-  ).get<{ count: number }>(vaultId);
+  const row = await context.db
+    .prepare('SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ? AND deleted_at IS NULL')
+    .get<{ count: number }>(vaultId);
   return Number(row?.count ?? 0);
 }

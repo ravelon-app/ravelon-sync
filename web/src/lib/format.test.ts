@@ -1,13 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  formatBytes,
-  formatDateTime,
-  formatRelative,
-  formatUptime,
-  initials,
-  personLabel,
-} from "./format";
+import { formatBytes, formatDateTime, formatRelative, formatUptime, initials, personLabel } from "./format";
 
 describe("formatBytes", () => {
   test("scales through the units", () => {

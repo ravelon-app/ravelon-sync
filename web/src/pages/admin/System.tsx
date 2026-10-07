@@ -1,14 +1,6 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
-import {
-  Badge,
-  DataList,
-  LoadingBlock,
-  Notice,
-  Panel,
-  PanelHeader,
-  PageHeader,
-} from "../../components/ui";
+import { Badge, DataList, LoadingBlock, Notice, Panel, PanelHeader, PageHeader } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { formatBytes, formatUptime } from "../../lib/format";

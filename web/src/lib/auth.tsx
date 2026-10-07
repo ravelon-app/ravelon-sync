@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   adoptSession,
@@ -34,9 +26,7 @@ export interface MfaChallenge {
   expiresAt: string;
 }
 
-export type SignInResult =
-  | { state: "complete" }
-  | { state: "mfaRequired"; challenge: MfaChallenge };
+export type SignInResult = { state: "complete" } | { state: "mfaRequired"; challenge: MfaChallenge };
 
 interface AuthValue {
   /** Null until the first load settles, so nothing renders against a guess. */
@@ -136,11 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback<AuthValue["signIn"]>(
     async (email, password) => {
-      const response = await api.post<SessionResponse | { mfaRequired: true; challengeToken: string; expiresAt: string }>(
-        "/v1/auth/login",
-        { email, password, ...CLIENT_INFO },
-        { anonymous: true },
-      );
+      const response = await api.post<
+        SessionResponse | { mfaRequired: true; challengeToken: string; expiresAt: string }
+      >("/v1/auth/login", { email, password, ...CLIENT_INFO }, { anonymous: true });
       if ("mfaRequired" in response && response.mfaRequired) {
         return {
           state: "mfaRequired",

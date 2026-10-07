@@ -242,7 +242,7 @@ export function refreshSession(): Promise<Session> {
 
 async function rotateStoredToken(): Promise<Session> {
   const stored = readStoredRefreshToken();
-  const refreshToken = stored.available ? stored.token : session?.refreshToken ?? null;
+  const refreshToken = stored.available ? stored.token : (session?.refreshToken ?? null);
   if (!refreshToken) {
     if (session) {
       session = null;
@@ -303,6 +303,5 @@ export const api = {
     request<T>(path, { ...options, method: "PUT", body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "PATCH", body }),
-  delete: <T>(path: string, options?: RequestOptions) =>
-    request<T>(path, { ...options, method: "DELETE" }),
+  delete: <T>(path: string, options?: RequestOptions) => request<T>(path, { ...options, method: "DELETE" }),
 };

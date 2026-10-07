@@ -180,7 +180,8 @@ describe('administration', () => {
     assert.equal(JSON.stringify(response.body).includes('super-secret-smtp-password'), false);
 
     // It is encrypted at rest too, not just hidden from the response.
-    const row = await server.db.prepare("SELECT value_json FROM settings WHERE key = 'smtp'")
+    const row = await server.db
+      .prepare("SELECT value_json FROM settings WHERE key = 'smtp'")
       .get<{ value_json: string }>();
     assert.ok(row);
     assert.equal(row.value_json.includes('super-secret-smtp-password'), false);

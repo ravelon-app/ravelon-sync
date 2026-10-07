@@ -70,7 +70,11 @@ export function Devices() {
       />
 
       {devices.error ? <Notice tone="danger">{devices.error}</Notice> : null}
-      {error ? <Notice tone="danger" className="mb-4">{error}</Notice> : null}
+      {error ? (
+        <Notice tone="danger" className="mb-4">
+          {error}
+        </Notice>
+      ) : null}
 
       <Panel>
         <PanelHeader title={t("devices.title")} />

@@ -61,9 +61,30 @@ function Router() {
 
   return (
     <Routes>
-      <Route path="/signin" element={<RedirectIfSignedIn><SignIn /></RedirectIfSignedIn>} />
-      <Route path="/signup" element={<RedirectIfSignedIn><SignUp /></RedirectIfSignedIn>} />
-      <Route path="/forgot-password" element={<RedirectIfSignedIn><ForgotPassword /></RedirectIfSignedIn>} />
+      <Route
+        path="/signin"
+        element={
+          <RedirectIfSignedIn>
+            <SignIn />
+          </RedirectIfSignedIn>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <RedirectIfSignedIn>
+            <SignUp />
+          </RedirectIfSignedIn>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <RedirectIfSignedIn>
+            <ForgotPassword />
+          </RedirectIfSignedIn>
+        }
+      />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       {/* Reachable signed out on purpose: both send the visitor to sign in and
@@ -72,19 +93,67 @@ function Router() {
       <Route path="/invite/team" element={<AcceptTeamInvite />} />
       <Route path="/setup" element={<Navigate to="/" replace />} />
 
-      <Route element={<RequireAuth><Shell /></RequireAuth>}>
+      <Route
+        element={
+          <RequireAuth>
+            <Shell />
+          </RequireAuth>
+        }
+      >
         <Route path="/" element={<Overview />} />
         <Route path="/vaults" element={<Vaults />} />
         <Route path="/teams" element={<Teams />} />
         <Route path="/devices" element={<Devices />} />
         <Route path="/account" element={<Account />} />
         <Route path="/security" element={<Security />} />
-        <Route path="/admin" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
-        <Route path="/admin/invites" element={<RequireAdmin><AdminInvites /></RequireAdmin>} />
-        <Route path="/admin/vaults" element={<RequireAdmin><AdminVaults /></RequireAdmin>} />
-        <Route path="/admin/audit" element={<RequireAdmin><AdminAudit /></RequireAdmin>} />
-        <Route path="/admin/settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
-        <Route path="/admin/system" element={<RequireAdmin><AdminSystem /></RequireAdmin>} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminUsers />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/invites"
+          element={
+            <RequireAdmin>
+              <AdminInvites />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/vaults"
+          element={
+            <RequireAdmin>
+              <AdminVaults />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/audit"
+          element={
+            <RequireAdmin>
+              <AdminAudit />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <RequireAdmin>
+              <AdminSettings />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/system"
+          element={
+            <RequireAdmin>
+              <AdminSystem />
+            </RequireAdmin>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Route>
 

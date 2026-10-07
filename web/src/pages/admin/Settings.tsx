@@ -22,13 +22,33 @@ import type { AdminSettings, PlatformSettings, RegistrationMode } from "../../li
 
 const REGISTRATION_MODES: Array<{
   value: RegistrationMode;
-  label: "admin.settingsRegistrationOpen" | "admin.settingsRegistrationInvite" | "admin.settingsRegistrationDomain" | "admin.settingsRegistrationClosed";
-  hint: "admin.settingsRegistrationOpenHint" | "admin.settingsRegistrationInviteHint" | "admin.settingsRegistrationDomainHint" | "admin.settingsRegistrationClosedHint";
+  label:
+    | "admin.settingsRegistrationOpen"
+    | "admin.settingsRegistrationInvite"
+    | "admin.settingsRegistrationDomain"
+    | "admin.settingsRegistrationClosed";
+  hint:
+    | "admin.settingsRegistrationOpenHint"
+    | "admin.settingsRegistrationInviteHint"
+    | "admin.settingsRegistrationDomainHint"
+    | "admin.settingsRegistrationClosedHint";
 }> = [
-  { value: "invite", label: "admin.settingsRegistrationInvite", hint: "admin.settingsRegistrationInviteHint" },
-  { value: "domain", label: "admin.settingsRegistrationDomain", hint: "admin.settingsRegistrationDomainHint" },
+  {
+    value: "invite",
+    label: "admin.settingsRegistrationInvite",
+    hint: "admin.settingsRegistrationInviteHint",
+  },
+  {
+    value: "domain",
+    label: "admin.settingsRegistrationDomain",
+    hint: "admin.settingsRegistrationDomainHint",
+  },
   { value: "open", label: "admin.settingsRegistrationOpen", hint: "admin.settingsRegistrationOpenHint" },
-  { value: "closed", label: "admin.settingsRegistrationClosed", hint: "admin.settingsRegistrationClosedHint" },
+  {
+    value: "closed",
+    label: "admin.settingsRegistrationClosed",
+    hint: "admin.settingsRegistrationClosedHint",
+  },
 ];
 
 export function AdminSettings() {
@@ -64,13 +84,7 @@ export function AdminSettings() {
   );
 }
 
-function PlatformPanel({
-  initial,
-  onSaved,
-}: {
-  initial: PlatformSettings;
-  onSaved(): Promise<void>;
-}) {
+function PlatformPanel({ initial, onSaved }: { initial: PlatformSettings; onSaved(): Promise<void> }) {
   const { t } = useI18n();
   const { run, pending, error, done } = useAction();
   const [form, setForm] = useState(initial);
@@ -116,9 +130,7 @@ function PlatformPanel({
         </Field>
 
         <fieldset className="space-y-2.5">
-          <legend className="mb-2 text-[13px] font-medium text-fg">
-            {t("admin.settingsRegistration")}
-          </legend>
+          <legend className="mb-2 text-[13px] font-medium text-fg">{t("admin.settingsRegistration")}</legend>
           {REGISTRATION_MODES.map((mode) => (
             <label
               key={mode.value}
@@ -291,9 +303,7 @@ function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): 
     <Panel>
       <PanelHeader title={t("admin.smtpTitle")} description={t("admin.smtpSubtitle")} />
       <form onSubmit={submit} className="space-y-5 px-5 py-5">
-        {settings.environmentSmtpConfigured ? (
-          <Notice tone="info">{t("admin.smtpFromEnv")}</Notice>
-        ) : null}
+        {settings.environmentSmtpConfigured ? <Notice tone="info">{t("admin.smtpFromEnv")}</Notice> : null}
         {save.error ? <Notice tone="danger">{save.error}</Notice> : null}
         {save.done ? <Notice tone="ok">{t("common.saved")}</Notice> : null}
         {/* A refused test (nothing saved yet, bad input) answers with an error

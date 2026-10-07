@@ -51,16 +51,16 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
       db,
       'SELECT COALESCE(SUM(LENGTH(ciphertext) + LENGTH(nonce)), 0) AS bytes FROM sync_items',
     );
-    const activeWeek = await scalar(
-      db,
-      'SELECT COUNT(*) AS count FROM users WHERE last_seen_at > ?',
-      [new Date(Date.now() - 7 * 86_400_000).toISOString()],
-    );
-    const recent = await db.prepare(
-      `SELECT a.id, a.action, a.target, a.created_at, u.email
+    const activeWeek = await scalar(db, 'SELECT COUNT(*) AS count FROM users WHERE last_seen_at > ?', [
+      new Date(Date.now() - 7 * 86_400_000).toISOString(),
+    ]);
+    const recent = await db
+      .prepare(
+        `SELECT a.id, a.action, a.target, a.created_at, u.email
        FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id
        ORDER BY a.created_at DESC LIMIT 10`,
-    ).all<{ id: string; action: string; target: string | null; created_at: string; email: string | null }>();
+      )
+      .all<{ id: string; action: string; target: string | null; created_at: string; email: string | null }>();
 
     return {
       users: { total: users, admins, disabled, activeLastWeek: activeWeek },
@@ -81,18 +81,20 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
 
   app.get('/v1/admin/users', async (request) => {
     await requireAdmin(db, config, request);
-    const query = z.object({
-      search: z.string().trim().max(200).optional(),
-      role: z.enum(['admin', 'user']).optional(),
-      status: z.enum(['active', 'disabled']).optional(),
-      limit: z.coerce.number().int().min(1).max(200).default(50),
-      offset: z.coerce.number().int().min(0).default(0),
-    }).parse(request.query);
+    const query = z
+      .object({
+        search: z.string().trim().max(200).optional(),
+        role: z.enum(['admin', 'user']).optional(),
+        status: z.enum(['active', 'disabled']).optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(request.query);
 
     const filters: string[] = [];
     const params: unknown[] = [];
     if (query.search) {
-      filters.push('(LOWER(email) LIKE ? OR LOWER(COALESCE(display_name, \'\')) LIKE ?)');
+      filters.push("(LOWER(email) LIKE ? OR LOWER(COALESCE(display_name, '')) LIKE ?)");
       const pattern = `%${query.search.toLowerCase()}%`;
       params.push(pattern, pattern);
     }
@@ -106,23 +108,27 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
-    const rows = await db.prepare(
-      `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    ).all<UserRow>(...params, query.limit, query.offset);
+    const rows = await db
+      .prepare(`SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all<UserRow>(...params, query.limit, query.offset);
     const total = await scalar(db, `SELECT COUNT(*) AS count FROM users ${where}`, params);
 
     return {
       total,
-      users: await Promise.all(rows.map(async (user) => ({
-        ...publicUser(user),
-        mfaEnabled: await isMfaEnabled(db, user.id),
-        vaults: await scalar(db, 'SELECT COUNT(*) AS count FROM vault_members WHERE user_id = ?', [user.id]),
-        devices: await scalar(
-          db,
-          `SELECT COUNT(*) AS count FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}`,
-          [user.id, nowIso()],
-        ),
-      }))),
+      users: await Promise.all(
+        rows.map(async (user) => ({
+          ...publicUser(user),
+          mfaEnabled: await isMfaEnabled(db, user.id),
+          vaults: await scalar(db, 'SELECT COUNT(*) AS count FROM vault_members WHERE user_id = ?', [
+            user.id,
+          ]),
+          devices: await scalar(
+            db,
+            `SELECT COUNT(*) AS count FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}`,
+            [user.id, nowIso()],
+          ),
+        })),
+      ),
     };
   });
 
@@ -131,18 +137,24 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get<UserRow>(idParam(request));
     if (!user) throw new ApiError(404, 'user_not_found', 'Account not found');
 
-    const vaults = await db.prepare(
-      `SELECT v.id, v.name, v.kind, vm.role FROM vaults v
+    const vaults = await db
+      .prepare(
+        `SELECT v.id, v.name, v.kind, vm.role FROM vaults v
        JOIN vault_members vm ON vm.vault_id = v.id WHERE vm.user_id = ?`,
-    ).all<{ id: string; name: string; kind: string; role: string }>(user.id);
-    const devices = await db.prepare(
-      `SELECT id, name, platform, last_seen_at, created_at FROM devices
+      )
+      .all<{ id: string; name: string; kind: string; role: string }>(user.id);
+    const devices = await db
+      .prepare(
+        `SELECT id, name, platform, last_seen_at, created_at FROM devices
        WHERE user_id = ? AND ${LIVE_DEVICE_SQL} ORDER BY created_at DESC`,
-    ).all<Record<string, unknown>>(user.id, nowIso());
-    const teams = await db.prepare(
-      `SELECT t.id, t.name, tm.role FROM teams t
+      )
+      .all<Record<string, unknown>>(user.id, nowIso());
+    const teams = await db
+      .prepare(
+        `SELECT t.id, t.name, tm.role FROM teams t
        JOIN team_members tm ON tm.team_id = t.id WHERE tm.user_id = ?`,
-    ).all<{ id: string; name: string; role: string }>(user.id);
+      )
+      .all<{ id: string; name: string; role: string }>(user.id);
 
     return {
       ...publicUser(user),
@@ -162,13 +174,15 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
   app.patch('/v1/admin/users/:id', async (request) => {
     const auth = await requireAdmin(db, config, request);
     const id = idParam(request);
-    const body = z.object({
-      role: z.enum(['admin', 'user']).optional(),
-      disabled: z.boolean().optional(),
-      disabledReason: z.string().trim().max(200).optional(),
-      displayName: z.string().trim().max(80).nullable().optional(),
-      emailVerified: z.boolean().optional(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        role: z.enum(['admin', 'user']).optional(),
+        disabled: z.boolean().optional(),
+        disabledReason: z.string().trim().max(200).optional(),
+        displayName: z.string().trim().max(80).nullable().optional(),
+        emailVerified: z.boolean().optional(),
+      })
+      .parse(request.body);
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get<UserRow>(id);
     if (!user) throw new ApiError(404, 'user_not_found', 'Account not found');
@@ -179,9 +193,9 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
       throw new ApiError(409, 'cannot_disable_self', 'You cannot disable your own account');
     }
     if (
-      user.role === 'admin'
-      && (body.role === 'user' || body.disabled === true)
-      && await scalar(db, "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0") <= 1
+      user.role === 'admin' &&
+      (body.role === 'user' || body.disabled === true) &&
+      (await scalar(db, "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0")) <= 1
     ) {
       throw new ApiError(409, 'last_admin', 'This is the only administrator on this server');
     }
@@ -192,15 +206,18 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
         await db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?').run(body.role, now, id);
       }
       if (body.disabled !== undefined) {
-        await db.prepare('UPDATE users SET disabled = ?, disabled_reason = ?, updated_at = ? WHERE id = ?')
-          .run(body.disabled ? 1 : 0, body.disabled ? body.disabledReason ?? null : null, now, id);
+        await db
+          .prepare('UPDATE users SET disabled = ?, disabled_reason = ?, updated_at = ? WHERE id = ?')
+          .run(body.disabled ? 1 : 0, body.disabled ? (body.disabledReason ?? null) : null, now, id);
       }
       if (body.displayName !== undefined) {
-        await db.prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?')
+        await db
+          .prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?')
           .run(body.displayName?.trim() || null, now, id);
       }
       if (body.emailVerified !== undefined) {
-        await db.prepare('UPDATE users SET email_verified = ?, updated_at = ? WHERE id = ?')
+        await db
+          .prepare('UPDATE users SET email_verified = ?, updated_at = ? WHERE id = ?')
           .run(body.emailVerified ? 1 : 0, now, id);
       }
     })();
@@ -212,14 +229,21 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     // Every field that changed is recorded. Marking an address verified or
     // renaming an account changes what others see and trust, so it belongs in
     // the trail as much as a role change does.
-    await audit(db, auth.user.id, 'admin.user_update', `user:${id}`, {
-      role: body.role ?? null,
-      disabled: body.disabled ?? null,
-      disabledReason: body.disabled === true ? body.disabledReason ?? null : null,
-      emailVerified: body.emailVerified ?? null,
-      displayName: body.displayName !== undefined ? body.displayName?.trim() || null : null,
-      changed: Object.keys(body).filter((key) => body[key as keyof typeof body] !== undefined),
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'admin.user_update',
+      `user:${id}`,
+      {
+        role: body.role ?? null,
+        disabled: body.disabled ?? null,
+        disabledReason: body.disabled === true ? (body.disabledReason ?? null) : null,
+        emailVerified: body.emailVerified ?? null,
+        displayName: body.displayName !== undefined ? body.displayName?.trim() || null : null,
+        changed: Object.keys(body).filter((key) => body[key as keyof typeof body] !== undefined),
+      },
+      clientIp(request),
+    );
     return publicUser((await db.prepare('SELECT * FROM users WHERE id = ?').get<UserRow>(id))!);
   });
 
@@ -246,7 +270,8 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     const user = await db.prepare('SELECT id FROM users WHERE id = ?').get(id);
     if (!user) throw new ApiError(404, 'user_not_found', 'Account not found');
 
-    await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+    await db
+      .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(await hashPassword(body.newPassword), nowIso(), id);
     await invalidatePasswordResetTokens(db, id);
     await revokeAllSessions(db, id);
@@ -278,70 +303,103 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
       throw new ApiError(409, 'cannot_delete_self', 'Delete your own account from account settings');
     }
     if (
-      user.role === 'admin'
-      && await scalar(db, "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0") <= 1
+      user.role === 'admin' &&
+      (await scalar(db, "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0")) <= 1
     ) {
       throw new ApiError(409, 'last_admin', 'This is the only administrator on this server');
     }
     await assertOwnsNoTeams(db, id);
-    await audit(db, auth.user.id, 'admin.user_delete', `user:${id}`, {
-      email: user.email,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'admin.user_delete',
+      `user:${id}`,
+      {
+        email: user.email,
+      },
+      clientIp(request),
+    );
     await deleteAccount(db, id);
     return reply.code(204).send();
   });
 
   app.get('/v1/admin/invites', async (request) => {
     await requireAdmin(db, config, request);
-    const rows = await db.prepare(
-      `SELECT i.*, c.email AS created_by_email, u.email AS used_by_email
+    const rows = await db
+      .prepare(
+        `SELECT i.*, c.email AS created_by_email, u.email AS used_by_email
        FROM account_invites i
        LEFT JOIN users c ON c.id = i.created_by_user_id
        LEFT JOIN users u ON u.id = i.used_by_user_id
        ORDER BY i.created_at DESC LIMIT 200`,
-    ).all<AccountInviteRow & { created_by_email: string | null; used_by_email: string | null }>();
+      )
+      .all<AccountInviteRow & { created_by_email: string | null; used_by_email: string | null }>();
     return { invites: rows.map(publicAccountInvite) };
   });
 
   app.post('/v1/admin/invites', async (request, reply) => {
     const auth = await requireAdmin(db, config, request);
-    const body = z.object({
-      email: emailSchema.optional(),
-      role: z.enum(['admin', 'user']).default('user'),
-      note: z.string().trim().max(200).default(''),
-      expiresInDays: z.number().int().min(1).max(90).default(ACCOUNT_INVITE_TTL_DAYS),
-    }).parse(request.body ?? {});
+    const body = z
+      .object({
+        email: emailSchema.optional(),
+        role: z.enum(['admin', 'user']).default('user'),
+        note: z.string().trim().max(200).default(''),
+        expiresInDays: z.number().int().min(1).max(90).default(ACCOUNT_INVITE_TTL_DAYS),
+      })
+      .parse(request.body ?? {});
 
-    if (body.email && await getUserByEmail(db, body.email)) {
+    if (body.email && (await getUserByEmail(db, body.email))) {
       throw new ApiError(409, 'account_exists', 'An account with this email already exists');
     }
 
     const token = randomToken('ain');
     const inviteId = newId();
     const expiresAt = new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
-    await db.prepare(
-      `INSERT INTO account_invites
+    await db
+      .prepare(
+        `INSERT INTO account_invites
         (id, token_hash, email, role, note, created_by_user_id, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(inviteId, sha256(token), body.email ?? '', body.role, body.note, auth.user.id, expiresAt, nowIso());
+      )
+      .run(
+        inviteId,
+        sha256(token),
+        body.email ?? '',
+        body.role,
+        body.note,
+        auth.user.id,
+        expiresAt,
+        nowIso(),
+      );
 
     const platform = await readSetting(db, 'platform');
     const inviteUrl = `${publicOrigin(config, request)}/signup?invite=${encodeURIComponent(token)}`;
     const delivery = body.email
-      ? await sendMail(db, config, accountInviteEmail({
-        serverName: platform.serverName,
-        to: body.email,
-        invitedBy: auth.user.display_name || auth.user.email,
-        inviteUrl,
-        expiresAt,
-      }))
+      ? await sendMail(
+          db,
+          config,
+          accountInviteEmail({
+            serverName: platform.serverName,
+            to: body.email,
+            invitedBy: auth.user.display_name || auth.user.email,
+            inviteUrl,
+            expiresAt,
+          }),
+        )
       : { sent: false, reason: 'no_recipient' as const };
 
-    await audit(db, auth.user.id, 'admin.invite_create', `invite:${inviteId}`, {
-      email: body.email ?? null,
-      role: body.role,
-      delivered: delivery.sent,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'admin.invite_create',
+      `invite:${inviteId}`,
+      {
+        email: body.email ?? null,
+        role: body.role,
+        delivered: delivery.sent,
+      },
+      clientIp(request),
+    );
 
     return reply.code(201).send({
       id: inviteId,
@@ -354,16 +412,18 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
       token,
       inviteUrl,
       emailDelivered: delivery.sent,
-      emailError: delivery.sent ? null : delivery.reason ?? null,
+      emailError: delivery.sent ? null : (delivery.reason ?? null),
     });
   });
 
   app.delete('/v1/admin/invites/:id', async (request, reply) => {
     const auth = await requireAdmin(db, config, request);
     const id = idParam(request);
-    const revoked = await db.prepare(
-      'UPDATE account_invites SET revoked_at = ? WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL',
-    ).run(nowIso(), id);
+    const revoked = await db
+      .prepare(
+        'UPDATE account_invites SET revoked_at = ? WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL',
+      )
+      .run(nowIso(), id);
     if (revoked.changes !== 1) throw new ApiError(404, 'invite_not_found', 'Invitation not found');
     await audit(db, auth.user.id, 'admin.invite_revoke', `invite:${id}`, null, clientIp(request));
     return reply.code(204).send();
@@ -371,50 +431,60 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
 
   app.get('/v1/admin/vaults', async (request) => {
     await requireAdmin(db, config, request);
-    const query = z.object({
-      limit: z.coerce.number().int().min(1).max(200).default(50),
-      offset: z.coerce.number().int().min(0).default(0),
-    }).parse(request.query);
-    const rows = await db.prepare(
-      `SELECT v.*, u.email AS owner_email, t.name AS team_name
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(request.query);
+    const rows = await db
+      .prepare(
+        `SELECT v.*, u.email AS owner_email, t.name AS team_name
        FROM vaults v
        LEFT JOIN users u ON u.id = v.user_id
        LEFT JOIN teams t ON t.id = v.team_id
        ORDER BY v.created_at DESC LIMIT ? OFFSET ?`,
-    ).all<Record<string, unknown>>(query.limit, query.offset);
+      )
+      .all<Record<string, unknown>>(query.limit, query.offset);
 
     return {
       total: await scalar(db, 'SELECT COUNT(*) AS count FROM vaults'),
       // Metadata only. The admin interface deliberately offers no way to read
       // a record: the server holds ciphertext it cannot open, and an operator
       // should not be given the impression otherwise.
-      vaults: await Promise.all(rows.map(async (row) => ({
-        id: row.id,
-        name: row.name,
-        kind: row.kind,
-        ownerEmail: row.owner_email,
-        teamName: row.team_name,
-        members: await scalar(db, 'SELECT COUNT(*) AS count FROM vault_members WHERE vault_id = ?', [row.id]),
-        items: await scalar(
-          db,
-          'SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ? AND deleted_at IS NULL',
-          [row.id],
-        ),
-        storageBytes: await vaultStorageBytes(db, String(row.id)),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }))),
+      vaults: await Promise.all(
+        rows.map(async (row) => ({
+          id: row.id,
+          name: row.name,
+          kind: row.kind,
+          ownerEmail: row.owner_email,
+          teamName: row.team_name,
+          members: await scalar(db, 'SELECT COUNT(*) AS count FROM vault_members WHERE vault_id = ?', [
+            row.id,
+          ]),
+          items: await scalar(
+            db,
+            'SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ? AND deleted_at IS NULL',
+            [row.id],
+          ),
+          storageBytes: await vaultStorageBytes(db, String(row.id)),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        })),
+      ),
     };
   });
 
   app.get('/v1/admin/audit', async (request) => {
     await requireAdmin(db, config, request);
-    const query = z.object({
-      action: z.string().trim().max(80).optional(),
-      actorUserId: z.string().trim().max(160).optional(),
-      limit: z.coerce.number().int().min(1).max(500).default(100),
-      offset: z.coerce.number().int().min(0).default(0),
-    }).parse(request.query);
+    const query = z
+      .object({
+        action: z.string().trim().max(80).optional(),
+        actorUserId: z.string().trim().max(160).optional(),
+        limit: z.coerce.number().int().min(1).max(500).default(100),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(request.query);
 
     const filters: string[] = [];
     const params: unknown[] = [];
@@ -428,11 +498,13 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
-    const rows = await db.prepare(
-      `SELECT a.*, u.email FROM audit_log a
+    const rows = await db
+      .prepare(
+        `SELECT a.*, u.email FROM audit_log a
        LEFT JOIN users u ON u.id = a.actor_user_id
        ${where} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
-    ).all<Record<string, unknown>>(...params, query.limit, query.offset);
+      )
+      .all<Record<string, unknown>>(...params, query.limit, query.offset);
 
     return {
       total: await scalar(db, `SELECT COUNT(*) AS count FROM audit_log a ${where}`, params),
@@ -469,11 +541,7 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     const auth = await requireAdmin(db, config, request);
     const body = platformSettingsSchema.parse(request.body);
     if (body.registrationMode === 'domain' && body.allowedEmailDomains.length === 0) {
-      throw new ApiError(
-        400,
-        'domains_required',
-        'Domain registration needs at least one allowed domain',
-      );
+      throw new ApiError(400, 'domains_required', 'Domain registration needs at least one allowed domain');
     }
     const previous = await readSetting(db, 'platform');
     await writeSetting(db, 'platform', body, auth.user.id);
@@ -481,14 +549,22 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     // Platform settings hold no secrets, so the changed keys and their new
     // values are recorded in full. Turning email verification off or opening
     // sign-up is exactly what an operator needs to find in the trail later.
-    const changed = (Object.keys(body) as (keyof typeof body)[])
-      .filter((key) => JSON.stringify(previous[key]) !== JSON.stringify(body[key]));
-    await audit(db, auth.user.id, 'admin.settings_platform', null, {
-      changed,
-      values: Object.fromEntries(changed.map((key) => [key, body[key]])),
-      registrationMode: body.registrationMode,
-      maintenanceMode: body.maintenanceMode,
-    }, clientIp(request));
+    const changed = (Object.keys(body) as (keyof typeof body)[]).filter(
+      (key) => JSON.stringify(previous[key]) !== JSON.stringify(body[key]),
+    );
+    await audit(
+      db,
+      auth.user.id,
+      'admin.settings_platform',
+      null,
+      {
+        changed,
+        values: Object.fromEntries(changed.map((key) => [key, body[key]])),
+        registrationMode: body.registrationMode,
+        maintenanceMode: body.maintenanceMode,
+      },
+      clientIp(request),
+    );
     return await readSetting(db, 'platform');
   });
 
@@ -503,25 +579,38 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     if (body.enabled && !body.host) {
       throw new ApiError(400, 'smtp_host_required', 'Enter an SMTP host');
     }
-    await writeSetting(db, 'smtp', {
-      ...DEFAULT_SMTP_SETTINGS,
-      enabled: body.enabled,
-      host: body.host,
-      port: body.port,
-      security: body.security,
-      user: body.user,
-      from: body.from,
-      // An omitted password means "leave it as it is", so saving other fields
-      // does not silently wipe a working credential.
-      passwordEncrypted: body.password === undefined
-        ? current.passwordEncrypted
-        : encryptSmtpPassword(config.settingsEncryptionKey, body.password),
-    }, auth.user.id);
+    await writeSetting(
+      db,
+      'smtp',
+      {
+        ...DEFAULT_SMTP_SETTINGS,
+        enabled: body.enabled,
+        host: body.host,
+        port: body.port,
+        security: body.security,
+        user: body.user,
+        from: body.from,
+        // An omitted password means "leave it as it is", so saving other fields
+        // does not silently wipe a working credential.
+        passwordEncrypted:
+          body.password === undefined
+            ? current.passwordEncrypted
+            : encryptSmtpPassword(config.settingsEncryptionKey, body.password),
+      },
+      auth.user.id,
+    );
 
-    await audit(db, auth.user.id, 'admin.settings_smtp', null, {
-      enabled: body.enabled,
-      host: body.host,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'admin.settings_smtp',
+      null,
+      {
+        enabled: body.enabled,
+        host: body.host,
+      },
+      clientIp(request),
+    );
     return { saved: true };
   });
 
@@ -535,14 +624,16 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     if (!reachable.ok) return { ok: false, stage: 'connect', error: reachable.error };
 
     const platform = await readSetting(db, 'platform');
-    const delivery = await sendMail(db, config, testEmail({
-      serverName: platform.serverName,
-      to: body.to ?? auth.user.email,
-    }));
+    const delivery = await sendMail(
+      db,
+      config,
+      testEmail({
+        serverName: platform.serverName,
+        to: body.to ?? auth.user.email,
+      }),
+    );
     await audit(db, auth.user.id, 'admin.smtp_test', null, { ok: delivery.sent }, clientIp(request));
-    return delivery.sent
-      ? { ok: true, stage: 'sent' }
-      : { ok: false, stage: 'send', error: delivery.reason };
+    return delivery.sent ? { ok: true, stage: 'sent' } : { ok: false, stage: 'send', error: delivery.reason };
   });
 
   /**
@@ -554,7 +645,9 @@ export function registerAdminRoutes(app: FastifyInstance, context: RouteContext)
     const smtp = await resolveSmtp(db, config);
     const warnings: string[] = [];
     if (secretIsGenerated(config.jwtSecret)) {
-      warnings.push('SYNC_JWT_SECRET is generated at startup. Every restart signs all clients out. Set it in the environment.');
+      warnings.push(
+        'SYNC_JWT_SECRET is generated at startup. Every restart signs all clients out. Set it in the environment.',
+      );
     }
     if (config.nodeEnv !== 'production') {
       warnings.push(`NODE_ENV is "${config.nodeEnv}". Set NODE_ENV=production for a real deployment.`);

@@ -44,7 +44,9 @@ body {
   background: var(--color-ink);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-feature-settings: "cv11" on, "ss01" on;
+  font-feature-settings:
+    "cv11" on,
+    "ss01" on;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

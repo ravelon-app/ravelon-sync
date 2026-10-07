@@ -225,7 +225,11 @@ describe('registration modes', () => {
     const token = invite.body.token;
 
     const wrongAddress = await api(server, 'POST', '/v1/auth/register', {
-      body: { email: 'someone-else@example.com', password: 'correct-horse-battery-staple', inviteToken: token },
+      body: {
+        email: 'someone-else@example.com',
+        password: 'correct-horse-battery-staple',
+        inviteToken: token,
+      },
     });
     assert.equal(wrongAddress.status, 403);
     assert.equal(wrongAddress.body.error.code, 'invite_invalid');

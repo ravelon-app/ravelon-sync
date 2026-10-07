@@ -76,8 +76,9 @@ export async function readSetting<K extends SettingKey>(
   db: AppDatabase,
   key: K,
 ): Promise<z.infer<(typeof SETTINGS_SCHEMAS)[K]>> {
-  const row = await db.prepare('SELECT value_json FROM settings WHERE key = ?')
-    .get(key) as { value_json: string } | undefined;
+  const row = (await db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key)) as
+    | { value_json: string }
+    | undefined;
   const schema = SETTINGS_SCHEMAS[key];
   if (!row) return schema.parse({}) as z.infer<(typeof SETTINGS_SCHEMAS)[K]>;
   try {
@@ -93,14 +94,16 @@ export async function writeSetting<K extends SettingKey>(
   value: z.infer<(typeof SETTINGS_SCHEMAS)[K]>,
   actorUserId: string | null,
 ): Promise<void> {
-  await db.prepare(
-    `INSERT INTO settings (key, value_json, updated_at, updated_by_user_id)
+  await db
+    .prepare(
+      `INSERT INTO settings (key, value_json, updated_at, updated_by_user_id)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        value_json = excluded.value_json,
        updated_at = excluded.updated_at,
        updated_by_user_id = excluded.updated_by_user_id`,
-  ).run(key, JSON.stringify(value), nowIso(), actorUserId);
+    )
+    .run(key, JSON.stringify(value), nowIso(), actorUserId);
 }
 
 const SMTP_PASSWORD_PURPOSE = 'settings:smtp-password';

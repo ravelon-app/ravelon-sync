@@ -107,14 +107,15 @@ function html(
   const paragraphs = body
     .map((line) => `<p style="margin:0 0 16px;line-height:1.6;color:#3f4a55;">${escapeHtml(line)}</p>`)
     .join('');
-  const action = actionLabel && actionUrl
-    ? `<p style="margin:24px 0 8px;">
+  const action =
+    actionLabel && actionUrl
+      ? `<p style="margin:24px 0 8px;">
          <a href="${escapeAttribute(actionUrl)}"
             style="display:inline-block;padding:12px 20px;background:#0b1117;color:#ffffff;
                    text-decoration:none;border-radius:8px;font-weight:600;">${escapeHtml(actionLabel)}</a>
        </p>
        <p style="margin:0;font-size:13px;color:#7a8590;word-break:break-all;">${escapeHtml(actionUrl)}</p>`
-    : '';
+      : '';
   return `<!doctype html>
 <html lang="en"><body style="margin:0;padding:32px 16px;background:#f4f6f8;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e7ec;border-radius:12px;padding:32px;">
@@ -133,11 +134,7 @@ function formatDate(iso: string): string {
 }
 
 function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function escapeAttribute(value: string): string {

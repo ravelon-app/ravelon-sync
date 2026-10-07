@@ -137,7 +137,13 @@ export interface AdminUserDetail extends User {
   mfaEnabled: boolean;
   vaults: Array<{ id: string; name: string; kind: string; role: VaultRole }>;
   teams: Array<{ id: string; name: string; role: TeamRole }>;
-  devices: Array<{ id: string; name: string; platform: string; lastSeenAt: string | null; createdAt: string }>;
+  devices: Array<{
+    id: string;
+    name: string;
+    platform: string;
+    lastSeenAt: string | null;
+    createdAt: string;
+  }>;
 }
 
 export interface AdminVault {

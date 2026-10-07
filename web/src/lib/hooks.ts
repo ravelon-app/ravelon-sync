@@ -18,7 +18,10 @@ export interface AsyncState<T> {
  * superseded load are dropped, so a fast click between pages cannot leave the
  * previous page's response in the new page's state.
  */
-export function useAsync<T>(loader: (signal: AbortSignal) => Promise<T>, deps: unknown[] = []): AsyncState<T> {
+export function useAsync<T>(
+  loader: (signal: AbortSignal) => Promise<T>,
+  deps: unknown[] = [],
+): AsyncState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

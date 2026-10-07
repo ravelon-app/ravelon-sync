@@ -184,15 +184,7 @@ export function Shell() {
   );
 }
 
-function NavGroup({
-  items,
-  heading,
-  className,
-}: {
-  items: NavItem[];
-  heading?: string;
-  className?: string;
-}) {
+function NavGroup({ items, heading, className }: { items: NavItem[]; heading?: string; className?: string }) {
   const { t } = useI18n();
   return (
     <div className={className}>

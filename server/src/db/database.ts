@@ -36,9 +36,10 @@ export interface OpenDatabaseOptions {
 }
 
 export async function openDatabase(options: OpenDatabaseOptions): Promise<AppDatabase> {
-  const db: AppDatabase = options.databaseUrl || options.postgresPool
-    ? new PostgresDatabase(options.databaseUrl, options.postgresPool)
-    : new SqliteDatabase(options.databaseFile);
+  const db: AppDatabase =
+    options.databaseUrl || options.postgresPool
+      ? new PostgresDatabase(options.databaseUrl, options.postgresPool)
+      : new SqliteDatabase(options.databaseFile);
   try {
     await migrate(db);
     return db;
@@ -58,16 +59,21 @@ async function migrate(db: AppDatabase): Promise<void> {
     await db.prepare('SELECT pg_advisory_lock(?)').get(migrationLock);
   }
   try {
-    await db.prepare(
-      'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
-    ).run();
+    await db
+      .prepare(
+        'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
+      )
+      .run();
 
     for (const migration of MIGRATIONS) {
-      const applied = await db.prepare('SELECT name FROM schema_migrations WHERE name = ?').get(migration.name);
+      const applied = await db
+        .prepare('SELECT name FROM schema_migrations WHERE name = ?')
+        .get(migration.name);
       if (applied) continue;
       await db.transaction(async () => {
         await db.exec(migration.sql);
-        await db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)')
+        await db
+          .prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)')
           .run(migration.name, nowIso());
       })();
     }
@@ -266,7 +272,7 @@ const LOCK_IDS: Record<LockName, number> = {
 
 /** Reads a single numeric aggregate, normalizing SQLite and PostgreSQL types. */
 export async function scalar(db: AppDatabase, sql: string, params: unknown[] = []): Promise<number> {
-  const row = await db.prepare(sql).get(...params) as Record<string, unknown> | undefined;
+  const row = (await db.prepare(sql).get(...params)) as Record<string, unknown> | undefined;
   if (!row) return 0;
   const value = Object.values(row)[0];
   return Number(value ?? 0);
