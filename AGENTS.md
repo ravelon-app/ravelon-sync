@@ -29,16 +29,20 @@ npm run dev:server     # API on 4100
 npm run dev:web        # interface on 5174, proxying the API
 npm test
 npm run typecheck
+npm run lint           # Biome: lint and formatting check
+npm run lint:fix       # apply safe lint fixes and formatting
 npm run build
 ```
 
-A change is not done until `npm test`, `npm run typecheck` and `npm run build`
-all pass.
+A change is not done until `npm test`, `npm run typecheck`, `npm run lint`
+and `npm run build` all pass.
 
 ## Style
 
 TypeScript everywhere. Two-space indent, semicolons. Server uses single
-quotes, the web interface double quotes. React components in PascalCase, hooks
+quotes, the web interface double quotes. Biome (`biome.json`) enforces the
+formatting and lint rules; run `npm run lint:fix` rather than formatting by
+hand. React components in PascalCase, hooks
 prefixed `use`, helpers camelCase.
 
 Comments explain why, not what. Restating the line below adds nothing; naming
@@ -84,8 +88,10 @@ Hard limits for every agent here:
 - Never push to `main`. Never merge. Never force-push.
 - Never commit secrets, `.env`, or key material.
 - Do not resolve a security finding by deleting the check that surfaced it.
-- A change is not done until `npm test`, `npm run typecheck` and
-  `npm run build` pass.
+- A change is not done until `npm test`, `npm run typecheck`,
+  `npm run lint` and `npm run build` pass.
+- Do not silence a lint finding in security code by disabling the rule;
+  fix it, or explain a targeted `biome-ignore` in its comment.
 
 ## Review guidelines
 

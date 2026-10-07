@@ -20,10 +20,11 @@ it did.
 ```bash
 npm test
 npm run typecheck
+npm run lint           # Biome: lint and formatting check
 npm run build
 ```
 
-All three, green. The test suite runs against in-memory SQLite and is fast.
+All four, green. `npm run lint:fix` applies safe lint fixes and formatting. The test suite runs against in-memory SQLite and is fast.
 
 ## What a good change looks like
 
@@ -38,8 +39,16 @@ All three, green. The test suite runs against in-memory SQLite and is fast.
 ## Style
 
 TypeScript throughout. Server uses single quotes, the web interface double
-quotes; two-space indent and semicolons in both. `npm run typecheck` is the
-arbiter for the rest.
+quotes; two-space indent and semicolons in both. [Biome](https://biomejs.dev)
+enforces formatting and lint rules from `biome.json`, and CI runs it;
+`npm run typecheck` is the arbiter for the rest.
+
+The one-time formatting commit is listed in `.git-blame-ignore-revs`. To
+skip it locally in `git blame`:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 Comments explain *why*, not what. A comment restating the line below it is
 noise; one explaining why a conditional update is used instead of a read
