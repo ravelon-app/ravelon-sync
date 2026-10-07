@@ -1,0 +1,5 @@
+# Commits that only reformat code. Skip them in git blame with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format the codebase with Biome
+d202fb29c8531b109e76b12122663990fccf8900
