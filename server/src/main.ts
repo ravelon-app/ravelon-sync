@@ -1,10 +1,10 @@
 import { buildServer } from './app.js';
-import { ConfigError, loadConfig, secretIsGenerated } from './config.js';
+import { type Config, ConfigError, loadConfig, secretIsGenerated } from './config.js';
 import { pruneAuditLog } from './lib/audit.js';
 import { readSetting } from './lib/settings.js';
 
 async function main(): Promise<void> {
-  let config;
+  let config: Config;
   try {
     config = loadConfig();
   } catch (error) {

@@ -243,6 +243,7 @@ function TeamDetailDialog({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [name, setName] = useState(team?.name ?? "");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: switching to another team resets the dialog state
   useEffect(() => {
     setName(team?.name ?? "");
     setConfirmingDelete(false);

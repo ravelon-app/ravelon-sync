@@ -130,7 +130,7 @@ function html(
 function formatDate(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  return `${parsed.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
 }
 
 function escapeHtml(value: string): string {

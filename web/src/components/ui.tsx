@@ -481,6 +481,7 @@ export function DataList({ rows }: { rows: Array<{ label: ReactNode; value: Reac
   return (
     <dl className="divide-y divide-line-soft">
       {rows.map((row, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: rows are a fixed list with ReactNode labels and no stable id
         <div key={index} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-5 py-3">
           <dt className="text-[13px] text-fg2">{row.label}</dt>
           <dd className="text-[13px] font-medium text-fg">{row.value}</dd>

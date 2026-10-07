@@ -18,7 +18,7 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAction, useAsync, useDocumentTitle } from "../../lib/hooks";
 import { useI18n } from "../../lib/i18n";
-import type { AdminSettings, PlatformSettings, RegistrationMode } from "../../lib/types";
+import type { AdminSettings as AdminSettingsData, PlatformSettings, RegistrationMode } from "../../lib/types";
 
 const REGISTRATION_MODES: Array<{
   value: RegistrationMode;
@@ -56,7 +56,7 @@ export function AdminSettings() {
   const { config, reloadConfig } = useAuth();
   useDocumentTitle(t("admin.settingsTitle"), config?.serverName);
 
-  const settings = useAsync((signal) => api.get<AdminSettings>("/v1/admin/settings", { signal }), []);
+  const settings = useAsync((signal) => api.get<AdminSettingsData>("/v1/admin/settings", { signal }), []);
 
   return (
     <>
@@ -244,7 +244,7 @@ function PlatformPanel({ initial, onSaved }: { initial: PlatformSettings; onSave
   );
 }
 
-function SmtpPanel({ settings, onSaved }: { settings: AdminSettings; onSaved(): void }) {
+function SmtpPanel({ settings, onSaved }: { settings: AdminSettingsData; onSaved(): void }) {
   const { t } = useI18n();
   const save = useAction();
   const test = useAction();

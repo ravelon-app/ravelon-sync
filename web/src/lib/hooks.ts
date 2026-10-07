@@ -31,6 +31,7 @@ export function useAsync<T>(
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloads on `nonce` and caller `deps` only; a language switch must not refetch
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
