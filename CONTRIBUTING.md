@@ -40,7 +40,7 @@ All four, green. `npm run lint:fix` applies safe lint fixes and formatting. The 
 
 TypeScript throughout. Server uses single quotes, the web interface double
 quotes; two-space indent and semicolons in both. [Biome](https://biomejs.dev)
-enforces formatting and lint rules from `biome.json`, and CI runs it;
+enforces formatting and lint rules from `biome.jsonc`, and CI runs it;
 `npm run typecheck` is the arbiter for the rest.
 
 The one-time formatting commit is listed in `.git-blame-ignore-revs`. To

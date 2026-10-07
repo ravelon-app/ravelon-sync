@@ -4,6 +4,7 @@
   "files": {
     "includes": [
       "*.json",
+      "biome.jsonc",
       "server/*.json",
       "server/src/**",
       "server/test/**",
@@ -34,13 +35,24 @@
   },
   "linter": {
     "enabled": true,
-    "rules": { "recommended": true }
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Stylistic: each use re-reads a row written or checked just before.
+        "noNonNullAssertion": "off"
+      }
+    }
   },
   "assist": { "enabled": false },
   "overrides": [
     {
       "includes": ["web/**"],
       "javascript": { "formatter": { "quoteStyle": "double" } }
+    },
+    {
+      "includes": ["server/test/**"],
+      // Tests read untyped JSON response bodies; the assertions are the check.
+      "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
     }
   ]
 }

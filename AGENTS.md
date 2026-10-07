@@ -40,7 +40,7 @@ and `npm run build` all pass.
 ## Style
 
 TypeScript everywhere. Two-space indent, semicolons. Server uses single
-quotes, the web interface double quotes. Biome (`biome.json`) enforces the
+quotes, the web interface double quotes. Biome (`biome.jsonc`) enforces the
 formatting and lint rules; run `npm run lint:fix` rather than formatting by
 hand. React components in PascalCase, hooks
 prefixed `use`, helpers camelCase.
