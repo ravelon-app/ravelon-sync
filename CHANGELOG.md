@@ -10,6 +10,8 @@ Notable changes, newest first. This project follows
 - Nodemailer 10.0.13 and a patched fast-uri. The previous versions had
   advisories for SMTP credential disclosure across transports, recipient
   parsing that could exhaust the stack, and host normalisation.
+- source-map-js 1.2.2 in the web build. The previous version could be held
+  up indefinitely by a crafted source map with indexed section offsets.
 
 ### New
 
