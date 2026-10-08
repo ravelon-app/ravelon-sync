@@ -57,13 +57,14 @@ export function AdminVaults() {
           label={t("overview.encryptedRecords")}
           value={formatNumber(overview.data?.syncItems ?? 0, locale)}
         />
-        <Stat
-          label={t("admin.vaultStorage")}
-          value={formatBytes(overview.data?.encryptedBytes ?? 0)}
-        />
+        <Stat label={t("admin.vaultStorage")} value={formatBytes(overview.data?.encryptedBytes ?? 0)} />
       </div>
 
-      {vaults.error ? <Notice tone="danger" className="mb-4">{vaults.error}</Notice> : null}
+      {vaults.error ? (
+        <Notice tone="danger" className="mb-4">
+          {vaults.error}
+        </Notice>
+      ) : null}
 
       <Panel>
         {vaults.loading ? (
@@ -97,9 +98,7 @@ export function AdminVaults() {
                     </Td>
                     <Td>{vault.ownerEmail ?? "—"}</Td>
                     <Td className="text-right font-mono tabular-nums">{vault.members}</Td>
-                    <Td className="text-right font-mono tabular-nums">
-                      {formatNumber(vault.items, locale)}
-                    </Td>
+                    <Td className="text-right font-mono tabular-nums">{formatNumber(vault.items, locale)}</Td>
                     <Td className="text-right font-mono tabular-nums">{formatBytes(vault.storageBytes)}</Td>
                     <Td className="whitespace-nowrap">{formatRelative(vault.updatedAt, locale)}</Td>
                   </tr>
@@ -143,13 +142,21 @@ export function AdminAudit() {
         />
       </div>
 
-      {entries.error ? <Notice tone="danger" className="mb-4">{entries.error}</Notice> : null}
+      {entries.error ? (
+        <Notice tone="danger" className="mb-4">
+          {entries.error}
+        </Notice>
+      ) : null}
 
       <Panel>
         <PanelHeader
           title={t("admin.auditTitle")}
           description={
-            entries.data ? t(entries.data.total === 1 ? "admin.auditCountOne" : "admin.auditCount", { count: formatNumber(entries.data.total, locale) }) : undefined
+            entries.data
+              ? t(entries.data.total === 1 ? "admin.auditCountOne" : "admin.auditCount", {
+                  count: formatNumber(entries.data.total, locale),
+                })
+              : undefined
           }
         />
         {entries.loading ? (

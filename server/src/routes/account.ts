@@ -55,12 +55,15 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
 
   app.patch('/v1/account', async (request) => {
     const auth = await requireAuth(db, config, request);
-    const body = z.object({
-      displayName: displayNameSchema.nullable().optional(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        displayName: displayNameSchema.nullable().optional(),
+      })
+      .parse(request.body);
 
     if (body.displayName !== undefined) {
-      await db.prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?')
+      await db
+        .prepare('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?')
         .run(body.displayName?.trim() || null, nowIso(), auth.user.id);
     }
     return await accountBundle(context, auth.user.id);
@@ -116,7 +119,14 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
       throw new ApiError(400, 'mfa_not_enabled', 'Two-factor authentication is not enabled');
     }
     const recoveryCodes = await regenerateRecoveryCodes(db, config, auth.user.id);
-    await audit(db, auth.user.id, 'mfa.recovery_codes_replaced', `user:${auth.user.id}`, null, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'mfa.recovery_codes_replaced',
+      `user:${auth.user.id}`,
+      null,
+      clientIp(request),
+    );
     return { recoveryCodes };
   });
 
@@ -131,20 +141,23 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
 
   app.get('/v1/account/activity', async (request) => {
     const auth = await requireAuth(db, config, request);
-    const query = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) })
+    const query = z
+      .object({ limit: z.coerce.number().int().min(1).max(200).default(50) })
       .parse(request.query);
-    const rows = await db.prepare(
-      `SELECT id, action, target, detail_json, ip, created_at
+    const rows = await db
+      .prepare(
+        `SELECT id, action, target, detail_json, ip, created_at
        FROM audit_log WHERE actor_user_id = ?
        ORDER BY created_at DESC LIMIT ?`,
-    ).all<{
-      id: string;
-      action: string;
-      target: string | null;
-      detail_json: string | null;
-      ip: string | null;
-      created_at: string;
-    }>(auth.user.id, query.limit);
+      )
+      .all<{
+        id: string;
+        action: string;
+        target: string | null;
+        detail_json: string | null;
+        ip: string | null;
+        created_at: string;
+      }>(auth.user.id, query.limit);
     return {
       entries: rows.map((row) => ({
         id: row.id,
@@ -167,13 +180,14 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
   app.get('/v1/account/export', async (request) => {
     const auth = await requireAuth(db, config, request);
     const vaults = await listAccessibleVaults(db, auth.user.id);
-    const devices = await db.prepare('SELECT * FROM devices WHERE user_id = ?')
-      .all<DeviceRow>(auth.user.id);
-    const items = await db.prepare(
-      `SELECT s.* FROM sync_items s
+    const devices = await db.prepare('SELECT * FROM devices WHERE user_id = ?').all<DeviceRow>(auth.user.id);
+    const items = await db
+      .prepare(
+        `SELECT s.* FROM sync_items s
        JOIN vault_members vm ON vm.vault_id = s.vault_id
        WHERE vm.user_id = ?`,
-    ).all(auth.user.id);
+      )
+      .all(auth.user.id);
 
     return {
       exportedAt: nowIso(),
@@ -193,23 +207,26 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
     // An administrator who is the last one left would lock everybody out of
     // settings, invitations and user management with no way back in.
     if (auth.user.role === 'admin') {
-      const admins = await db.prepare(
-        "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0",
-      ).get<{ count: number }>();
+      const admins = await db
+        .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND disabled = 0")
+        .get<{ count: number }>();
       if (Number(admins?.count ?? 0) <= 1) {
-        throw new ApiError(
-          409,
-          'last_admin',
-          'Promote another administrator before deleting this account',
-        );
+        throw new ApiError(409, 'last_admin', 'Promote another administrator before deleting this account');
       }
     }
 
     await assertOwnsNoTeams(db, auth.user.id);
 
-    await audit(db, auth.user.id, 'account.delete', `user:${auth.user.id}`, {
-      email: auth.user.email,
-    }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'account.delete',
+      `user:${auth.user.id}`,
+      {
+        email: auth.user.email,
+      },
+      clientIp(request),
+    );
     // Cascades remove devices, sessions, personal vaults, memberships and
     // their encrypted records. The audit line above survives with a null actor.
     await deleteAccount(db, auth.user.id);
@@ -218,10 +235,12 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
 
   app.get('/v1/devices', async (request) => {
     const auth = await requireAuth(db, config, request);
-    const devices = await db.prepare(
-      `SELECT * FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}
+    const devices = await db
+      .prepare(
+        `SELECT * FROM devices WHERE user_id = ? AND ${LIVE_DEVICE_SQL}
        ORDER BY COALESCE(last_seen_at, created_at) DESC`,
-    ).all<DeviceRow>(auth.user.id, nowIso());
+      )
+      .all<DeviceRow>(auth.user.id, nowIso());
     return {
       devices: devices.map((device) => ({
         ...publicDevice(device),
@@ -234,7 +253,8 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
     const auth = await requireAuth(db, config, request);
     const { id } = z.object({ id: z.string().min(1).max(160) }).parse(request.params);
     const body = z.object({ name: z.string().trim().min(1).max(120) }).parse(request.body);
-    const changed = await db.prepare('UPDATE devices SET name = ? WHERE id = ? AND user_id = ?')
+    const changed = await db
+      .prepare('UPDATE devices SET name = ? WHERE id = ? AND user_id = ?')
       .run(body.name, id, auth.user.id);
     if (changed.changes !== 1) throw new ApiError(404, 'device_not_found', 'Device not found');
     return { renamed: true };
@@ -243,7 +263,8 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
   app.delete('/v1/devices/:id', async (request, reply) => {
     const auth = await requireAuth(db, config, request);
     const { id } = z.object({ id: z.string().min(1).max(160) }).parse(request.params);
-    const device = await db.prepare('SELECT id FROM devices WHERE id = ? AND user_id = ?')
+    const device = await db
+      .prepare('SELECT id FROM devices WHERE id = ? AND user_id = ?')
       .get(id, auth.user.id);
     if (!device) throw new ApiError(404, 'device_not_found', 'Device not found');
     await db.prepare('DELETE FROM devices WHERE id = ?').run(id);
@@ -255,8 +276,7 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
     const auth = await requireAuth(db, config, request);
     // The device making the request is kept, so signing every other device out
     // does not also sign the person out of the page they are looking at.
-    await db.prepare('DELETE FROM devices WHERE user_id = ? AND id <> ?')
-      .run(auth.user.id, auth.deviceId);
+    await db.prepare('DELETE FROM devices WHERE user_id = ? AND id <> ?').run(auth.user.id, auth.deviceId);
     await revokeAllSessions(db, auth.user.id, auth.deviceId);
     await audit(db, auth.user.id, 'device.revoke_others', `user:${auth.user.id}`, null, clientIp(request));
     return { revoked: true };
@@ -265,7 +285,8 @@ export function registerAccountRoutes(app: FastifyInstance, context: RouteContex
 
 export async function accountBundle(context: RouteContext, userId: string) {
   const { db } = context;
-  const user = await db.prepare('SELECT * FROM users WHERE id = ?')
+  const user = await db
+    .prepare('SELECT * FROM users WHERE id = ?')
     .get<Parameters<typeof publicUser>[0]>(userId);
   if (!user) throw new ApiError(404, 'user_not_found', 'Account not found');
 

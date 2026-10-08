@@ -67,8 +67,10 @@ export const en = {
   "auth.resetSent": "If an account exists for that address, a reset link is on its way.",
   "auth.resetNewPassword": "New password",
   "auth.resetDone": "Your password was changed. Sign in with it now.",
-  "auth.resetNoSmtp": "This server cannot send email, so no reset link can reach you. Ask an administrator to set a new password for you.",
-  "auth.resetKeyWarning": "Your devices keep their local copy of your vault, but the encrypted copy on this server stays sealed under your old password. After a reset, Ravelon asks for the old password once. If you no longer know it, Ravelon starts a new sync key from a device's local copy and the old server copy is replaced.",
+  "auth.resetNoSmtp":
+    "This server cannot send email, so no reset link can reach you. Ask an administrator to set a new password for you.",
+  "auth.resetKeyWarning":
+    "Your devices keep their local copy of your vault, but the encrypted copy on this server stays sealed under your old password. After a reset, Ravelon asks for the old password once. If you no longer know it, Ravelon starts a new sync key from a device's local copy and the old server copy is replaced.",
   "auth.verifyEmailTitle": "Confirm your email",
   "auth.verifyEmailDone": "Your email address is confirmed.",
   "auth.verifyEmailFailed": "This confirmation link is invalid or expired.",
@@ -76,13 +78,15 @@ export const en = {
 
   // First-run setup
   "setup.title": "Set up this server",
-  "setup.subtitle": "The first account becomes the administrator. Nobody else can register until you decide who may.",
+  "setup.subtitle":
+    "The first account becomes the administrator. Nobody else can register until you decide who may.",
   "setup.serverName": "Server name",
   "setup.serverNameHint": "Shown to everyone who signs in here.",
   "setup.adminSection": "Administrator account",
   "setup.create": "Create administrator",
   "brand.tagline": "Zero-knowledge sync",
-  "setup.encryptedNote": "Your vault contents are encrypted on your devices. This server stores ciphertext it cannot read, including yours.",
+  "setup.encryptedNote":
+    "Your vault contents are encrypted on your devices. This server stores ciphertext it cannot read, including yours.",
 
   // Navigation
   "nav.overview": "Overview",
@@ -107,7 +111,8 @@ export const en = {
   "overview.yourTeams": "Teams",
   "overview.encryptedRecords": "Encrypted records",
   "overview.connectTitle": "Connect the Ravelon app",
-  "overview.connectBody": "In Ravelon, open Settings, Account & sync, choose Own server, enter this URL and sign in with this account.",
+  "overview.connectBody":
+    "In Ravelon, open Settings, Account & sync, choose Own server, enter this URL and sign in with this account.",
   "overview.connectUrlLabel": "Server URL",
   "overview.securityTitle": "Secure this account",
   "overview.securityMfaOff": "Two-factor authentication is off. Turn it on to protect sign-ins.",
@@ -131,7 +136,8 @@ export const en = {
   "vaults.members": "Members",
   "vaults.addMemberHint": "Members are added through the team this vault belongs to.",
   "vaults.deleteTitle": "Delete {name}?",
-  "vaults.deleteBody": "Every encrypted record in this vault is deleted permanently. Devices still holding a local copy keep theirs.",
+  "vaults.deleteBody":
+    "Every encrypted record in this vault is deleted permanently. Devices still holding a local copy keep theirs.",
   "vaults.deleteConfirm": "Type the vault name to confirm",
   "vaults.roleOwner": "Owner",
   "vaults.roleAdmin": "Administrator",
@@ -163,21 +169,26 @@ export const en = {
   "teams.roleAdmin": "Administrator",
   "teams.roleMember": "Member",
   "teams.removeMember": "Remove from team",
-  "teams.removeMemberBody": "{email} loses access to every vault in this team. Records already on their devices stay there.",
+  "teams.removeMemberBody":
+    "{email} loses access to every vault in this team. Records already on their devices stay there.",
   "teams.transferOwnership": "Transfer ownership",
   "teams.transferBody": "{email} becomes the owner of {team}. You stay an administrator.",
   "teams.deleteTitle": "Delete {name}?",
   "teams.acceptTitle": "Join {team}",
   "teams.acceptBody": "You were invited as {role} with {vaultRole} access to the team vaults.",
   "teams.acceptButton": "Accept invitation",
-  "teams.acceptSignIn": "This invitation is for {email}. Create an account with that address, or sign in if you already have one.",
+  "teams.acceptSignIn":
+    "This invitation is for {email}. Create an account with that address, or sign in if you already have one.",
   "teams.acceptCreate": "Create account and join",
   "teams.acceptHaveAccount": "I already have an account",
-  "teams.acceptSharingKey": "To open the team vault in Ravelon you also need its sharing key. The person who invited you sends it separately; Ravelon asks for it when you open the team vault.",
+  "teams.acceptSharingKey":
+    "To open the team vault in Ravelon you also need its sharing key. The person who invited you sends it separately; Ravelon asks for it when you open the team vault.",
   "teams.manage": "Manage team",
-  "teams.deleteBody": "Deleting {team} also deletes its vaults and every encrypted record in them. Devices keep their local copies. This cannot be undone.",
+  "teams.deleteBody":
+    "Deleting {team} also deletes its vaults and every encrypted record in them. Devices keep their local copies. This cannot be undone.",
   "teams.deleteConfirm": "Type the team name to confirm",
-  "teams.sharingKeyBody": "Membership gives access to the encrypted team vault, but only its sharing key opens it. In Ravelon, copy the sharing key from the team vault in the vault switcher and send it to new members through a trusted channel, separately from the invitation link.",
+  "teams.sharingKeyBody":
+    "Membership gives access to the encrypted team vault, but only its sharing key opens it. In Ravelon, copy the sharing key from the team vault in the vault switcher and send it to new members through a trusted channel, separately from the invitation link.",
   "teams.acceptWrongAccount": "This invitation was sent to {email}. Sign in with that account.",
   "teams.acceptDone": "You joined {team}.",
 
@@ -211,24 +222,29 @@ export const en = {
   "account.emailUnverified": "Not confirmed",
   "account.resendVerification": "Send confirmation email",
   "account.verificationSent": "Confirmation email sent.",
-  "account.verificationNoMail": "No mail is configured on this server. Ask an administrator to confirm your address.",
+  "account.verificationNoMail":
+    "No mail is configured on this server. Ask an administrator to confirm your address.",
   "account.changePassword": "Change password",
   "account.currentPassword": "Current password",
   "account.newPassword": "New password",
   "account.passwordChanged": "Password changed. Other devices were signed out.",
-  "account.passwordKeyNote": "Changing it here does not re-seal the key your vault is encrypted with. The next time you sign in to Ravelon, it asks for your previous password once. Changing it in the Ravelon app avoids that step.",
+  "account.passwordKeyNote":
+    "Changing it here does not re-seal the key your vault is encrypted with. The next time you sign in to Ravelon, it asks for your previous password once. Changing it in the Ravelon app avoids that step.",
   "account.exportTitle": "Export your data",
-  "account.exportBody": "Downloads everything this server holds about your account, including your encrypted records. They stay encrypted; this file alone cannot open them.",
+  "account.exportBody":
+    "Downloads everything this server holds about your account, including your encrypted records. They stay encrypted; this file alone cannot open them.",
   "account.export": "Download export",
   "account.dangerZone": "Delete account",
-  "account.deleteBody": "Your account, vaults and every encrypted record on this server are deleted permanently. This cannot be undone.",
+  "account.deleteBody":
+    "Your account, vaults and every encrypted record on this server are deleted permanently. This cannot be undone.",
   "account.deleteConfirm": "Type your email address to confirm",
   "account.delete": "Delete my account",
 
   // Security and MFA
   "security.title": "Security",
   "security.mfaTitle": "Two-factor authentication",
-  "security.mfaOffBody": "Add a code from an authenticator app to every sign-in. Strongly recommended for an account that can reach your infrastructure.",
+  "security.mfaOffBody":
+    "Add a code from an authenticator app to every sign-in. Strongly recommended for an account that can reach your infrastructure.",
   "security.mfaOnBody": "Sign-ins on this account need a code from your authenticator app.",
   "security.mfaEnable": "Turn on two-factor",
   "security.mfaDisable": "Turn off two-factor",
@@ -238,8 +254,10 @@ export const en = {
   "security.mfaEnabled": "Two-factor authentication is on.",
   "security.mfaDisabled": "Two-factor authentication is off.",
   "security.recoveryTitle": "Recovery codes",
-  "security.recoveryBody": "Each code works once if you lose your authenticator. Store them somewhere safe. They are shown only now.",
-  "security.recoveryStatusBody": "Each code works once if you lose your authenticator. Generating new codes replaces the old ones and shows the new ones once.",
+  "security.recoveryBody":
+    "Each code works once if you lose your authenticator. Store them somewhere safe. They are shown only now.",
+  "security.recoveryStatusBody":
+    "Each code works once if you lose your authenticator. Generating new codes replaces the old ones and shows the new ones once.",
   "security.recoveryLow": "You are running out of recovery codes. Generate new ones before the last is gone.",
   "security.recoveryRemaining": "{count} of your recovery codes are unused.",
   "security.recoveryRegenerate": "Generate new codes",
@@ -257,14 +275,17 @@ export const en = {
   "admin.filterDisabled": "Disabled",
   "admin.userDisable": "Disable account",
   "admin.userEnable": "Enable account",
-  "admin.userDisableBody": "{email} is signed out everywhere and cannot sign in again until you enable the account.",
+  "admin.userDisableBody":
+    "{email} is signed out everywhere and cannot sign in again until you enable the account.",
   "admin.userDisableReason": "Reason (shown in the audit log)",
   "admin.userMakeAdmin": "Make administrator",
   "admin.userRemoveAdmin": "Remove administrator",
   "admin.userSetPassword": "Set a new password",
-  "admin.userSetPasswordBody": "Use this when someone is locked out and the server cannot send mail. Every session is signed out. Their synced vault stays sealed under the old password: Ravelon asks them for it once. Without it, their devices keep their local copies and Ravelon starts a new sync key from one of them.",
+  "admin.userSetPasswordBody":
+    "Use this when someone is locked out and the server cannot send mail. Every session is signed out. Their synced vault stays sealed under the old password: Ravelon asks them for it once. Without it, their devices keep their local copies and Ravelon starts a new sync key from one of them.",
   "admin.userResetMfa": "Reset two-factor",
-  "admin.userResetMfaBody": "Clears the authenticator and recovery codes for {email}, so they can sign in with their password alone. Only do this once you know who is asking.",
+  "admin.userResetMfaBody":
+    "Clears the authenticator and recovery codes for {email}, so they can sign in with their password alone. Only do this once you know who is asking.",
   "admin.userDelete": "Delete account",
   "admin.userDeleteBody": "{email}, their vaults and every encrypted record are deleted permanently.",
   "admin.lastAdmin": "This is the only administrator on this server.",
@@ -287,7 +308,8 @@ export const en = {
   "admin.noInvites": "No invitations yet.",
 
   "admin.vaultsTitle": "Vaults",
-  "admin.vaultsSubtitle": "Metadata only. This server cannot read what is inside a vault, and neither can you.",
+  "admin.vaultsSubtitle":
+    "Metadata only. This server cannot read what is inside a vault, and neither can you.",
   "admin.vaultOwner": "Owner",
   "admin.vaultRecords": "Records",
   "admin.vaultStorage": "Storage",
@@ -318,7 +340,8 @@ export const en = {
   "admin.settingsDomains": "Allowed domains",
   "admin.settingsDomainsHint": "One per line, for example example.com",
   "admin.settingsRequireVerification": "Require a confirmed email address before syncing",
-  "admin.settingsRequireVerificationHint": "Needs working mail. Turn this on only after you have tested SMTP.",
+  "admin.settingsRequireVerificationHint":
+    "Needs working mail. Turn this on only after you have tested SMTP.",
   "admin.settingsAllowTeams": "Let members create teams",
   "admin.settingsRetention": "Keep audit history for (days)",
   "admin.settingsRetentionHint": "0 keeps everything.",

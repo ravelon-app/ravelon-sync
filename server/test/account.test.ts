@@ -56,10 +56,12 @@ describe('account deletion', () => {
 
     // Cascades have to actually run, or a deleted account leaves its
     // ciphertext on a server nobody can reach it from.
-    const items = await server.db.prepare('SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ?')
+    const items = await server.db
+      .prepare('SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ?')
       .get<{ count: number }>('goodbye-vault');
     assert.equal(Number(items?.count ?? 0), 0);
-    const vaults = await server.db.prepare('SELECT COUNT(*) AS count FROM vaults WHERE id = ?')
+    const vaults = await server.db
+      .prepare('SELECT COUNT(*) AS count FROM vaults WHERE id = ?')
       .get<{ count: number }>('goodbye-vault');
     assert.equal(Number(vaults?.count ?? 0), 0);
   });
@@ -165,10 +167,15 @@ describe('the device list', () => {
     let list = await api(server, 'GET', '/v1/devices', { token: account.accessToken });
     assert.deepEqual(list.body.devices.map((device: any) => device.name).sort(), ['Browser', 'Laptop']);
 
-    const out = await api(server, 'POST', '/v1/auth/logout', { body: { refreshToken: second.body.refreshToken } });
+    const out = await api(server, 'POST', '/v1/auth/logout', {
+      body: { refreshToken: second.body.refreshToken },
+    });
     assert.equal(out.status, 204);
 
     list = await api(server, 'GET', '/v1/devices', { token: account.accessToken });
-    assert.deepEqual(list.body.devices.map((device: any) => device.name), ['Laptop']);
+    assert.deepEqual(
+      list.body.devices.map((device: any) => device.name),
+      ['Laptop'],
+    );
   });
 });

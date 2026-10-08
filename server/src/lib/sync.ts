@@ -39,7 +39,10 @@ export const syncItemSchema = z.object({
   id: z.string().min(1).max(160),
   vaultId: z.string().min(1).max(160),
   itemType: z.string().min(1).max(40),
-  ciphertext: z.string().min(1).max(1024 * 768),
+  ciphertext: z
+    .string()
+    .min(1)
+    .max(1024 * 768),
   nonce: z.string().min(1).max(512),
   schemaVersion: z.number().int().positive(),
   clientRevision: z.number().int().nonnegative(),
@@ -98,9 +101,9 @@ export function looksLikePlaintext(value: string): boolean {
 function isPlaintextJson(value: string): boolean {
   const trimmed = value.trim();
   return (
-    trimmed.startsWith('{')
-    || trimmed.startsWith('[')
-    || /"(password|hostname|privateKey|secret|username)"\s*:/i.test(trimmed)
+    trimmed.startsWith('{') ||
+    trimmed.startsWith('[') ||
+    /"(password|hostname|privateKey|secret|username)"\s*:/i.test(trimmed)
   );
 }
 
@@ -114,10 +117,11 @@ function decodeMaybeBase64Text(value: string): string | null {
     const text = Buffer.from(padded, 'base64').toString('utf8').trim();
     if (!text || text.includes('�')) return null;
     const printable = [...text].filter(
-      (character) => character === '\n'
-        || character === '\r'
-        || character === '\t'
-        || (character >= ' ' && character <= '~'),
+      (character) =>
+        character === '\n' ||
+        character === '\r' ||
+        character === '\t' ||
+        (character >= ' ' && character <= '~'),
     ).length;
     return printable / text.length >= 0.85 ? text : null;
   } catch {
@@ -144,16 +148,16 @@ export function compareRevision(
 /** True when a push carries nothing new, so it can be acknowledged without a write. */
 export function isUnchangedSyncItem(existing: ExistingSyncItemRow, item: SyncItemInput): boolean {
   return (
-    existing.item_type === item.itemType
-    && existing.schema_version === item.schemaVersion
-    && existing.client_revision === item.clientRevision
-    && existing.updated_at === item.updatedAt
-    && (existing.deleted_at ?? null) === (item.deletedAt ?? null)
+    existing.item_type === item.itemType &&
+    existing.schema_version === item.schemaVersion &&
+    existing.client_revision === item.clientRevision &&
+    existing.updated_at === item.updatedAt &&
+    (existing.deleted_at ?? null) === (item.deletedAt ?? null) &&
     // Metadata alone is not identity: a record re-encrypted under the same
     // revision and timestamp (a key rotation, a repaired client) must still be
     // stored, or the server keeps serving the old ciphertext forever.
-    && existing.ciphertext === item.ciphertext
-    && existing.nonce === item.nonce
+    existing.ciphertext === item.ciphertext &&
+    existing.nonce === item.nonce
   );
 }
 
@@ -170,15 +174,16 @@ export function encodedBytes(...values: string[]): number {
  */
 export async function nextCursor(db: AppDatabase): Promise<number> {
   await db.prepare("UPDATE counters SET value = value + 1 WHERE name = 'sync_cursor'").run();
-  const row = await db.prepare("SELECT value FROM counters WHERE name = 'sync_cursor'")
+  const row = await db
+    .prepare("SELECT value FROM counters WHERE name = 'sync_cursor'")
     .get<{ value: number }>();
   return Number(row?.value ?? 0);
 }
 
 export async function vaultCursor(db: AppDatabase, vaultId: string): Promise<number> {
-  const row = await db.prepare(
-    'SELECT COALESCE(MAX(cursor), 0) AS cursor FROM sync_items WHERE vault_id = ?',
-  ).get<{ cursor: number }>(vaultId);
+  const row = await db
+    .prepare('SELECT COALESCE(MAX(cursor), 0) AS cursor FROM sync_items WHERE vault_id = ?')
+    .get<{ cursor: number }>(vaultId);
   return Number(row?.cursor ?? 0);
 }
 
@@ -206,48 +211,53 @@ export async function insertSyncVersion(
   input: InsertVersionInput,
   keep: number,
 ): Promise<void> {
-  await db.prepare(
-    `INSERT INTO sync_item_versions
+  await db
+    .prepare(
+      `INSERT INTO sync_item_versions
       (id, vault_id, item_id, item_type, ciphertext, nonce, schema_version, client_revision,
        updated_at, deleted_at, restored_at, version_cursor, stored_at, actor_user_id, device_id,
        reason, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    newId(),
-    input.vaultId,
-    input.itemId,
-    input.itemType,
-    input.ciphertext,
-    input.nonce,
-    input.schemaVersion,
-    input.clientRevision,
-    input.updatedAt,
-    input.deletedAt,
-    input.restoredAt,
-    input.versionCursor,
-    input.storedAt,
-    input.actorUserId,
-    input.deviceId,
-    input.reason,
-    nowIso(),
-  );
+    )
+    .run(
+      newId(),
+      input.vaultId,
+      input.itemId,
+      input.itemType,
+      input.ciphertext,
+      input.nonce,
+      input.schemaVersion,
+      input.clientRevision,
+      input.updatedAt,
+      input.deletedAt,
+      input.restoredAt,
+      input.versionCursor,
+      input.storedAt,
+      input.actorUserId,
+      input.deviceId,
+      input.reason,
+      nowIso(),
+    );
 
   // Trimming by id keeps the statement portable; a window function would be
   // faster but SQLite and PostgreSQL disagree on DELETE ... USING syntax.
-  const survivors = await db.prepare(
-    `SELECT id FROM sync_item_versions
+  const survivors = await db
+    .prepare(
+      `SELECT id FROM sync_item_versions
      WHERE vault_id = ? AND item_id = ?
      ORDER BY version_cursor DESC
      LIMIT ?`,
-  ).all<{ id: string }>(input.vaultId, input.itemId, keep);
+    )
+    .all<{ id: string }>(input.vaultId, input.itemId, keep);
   if (survivors.length < keep) return;
   const oldest = survivors[survivors.length - 1].id;
-  const cutoff = await db.prepare('SELECT version_cursor FROM sync_item_versions WHERE id = ?')
+  const cutoff = await db
+    .prepare('SELECT version_cursor FROM sync_item_versions WHERE id = ?')
     .get<{ version_cursor: number }>(oldest);
   if (!cutoff) return;
-  await db.prepare(
-    'DELETE FROM sync_item_versions WHERE vault_id = ? AND item_id = ? AND version_cursor < ?',
-  ).run(input.vaultId, input.itemId, cutoff.version_cursor);
+  await db
+    .prepare('DELETE FROM sync_item_versions WHERE vault_id = ? AND item_id = ? AND version_cursor < ?')
+    .run(input.vaultId, input.itemId, cutoff.version_cursor);
 }
 
 /** The wire shape of a stored record. Matches what Ravelon clients decode. */

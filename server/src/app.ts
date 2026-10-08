@@ -53,7 +53,8 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Referrer-Policy': 'no-referrer',
   'X-Frame-Options': 'DENY',
   'Cross-Origin-Opener-Policy': 'same-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()',
+  'Permissions-Policy':
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()',
 };
 
 /** Everything except the sync push, which sets its own much larger limit. */
@@ -66,35 +67,38 @@ export interface BuiltServer {
 }
 
 export async function buildServer(config: Config, db?: AppDatabase): Promise<BuiltServer> {
-  const database = db ?? await openDatabase({
-    databaseUrl: config.databaseUrl,
-    databaseFile: config.databaseFile,
-  });
+  const database =
+    db ??
+    (await openDatabase({
+      databaseUrl: config.databaseUrl,
+      databaseFile: config.databaseFile,
+    }));
 
   const app = Fastify({
     // Only exact proxy addresses are trusted. Trusting every hop would let any
     // client set X-Forwarded-For and defeat the per-IP rate limits.
     trustProxy: config.trustedProxyIps.length > 0 ? config.trustedProxyIps : false,
     bodyLimit: GENERAL_BODY_LIMIT_BYTES,
-    logger: config.nodeEnv === 'test'
-      ? false
-      : {
-        level: config.nodeEnv === 'production' ? 'info' : 'debug',
-        redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.headers.cookie',
-            'req.body.password',
-            'req.body.newPassword',
-            'req.body.currentPassword',
-            'req.body.refreshToken',
-            'req.body.token',
-            'req.body.code',
-            'req.body.mfaCode',
-          ],
-          censor: '[redacted]',
-        },
-      },
+    logger:
+      config.nodeEnv === 'test'
+        ? false
+        : {
+            level: config.nodeEnv === 'production' ? 'info' : 'debug',
+            redact: {
+              paths: [
+                'req.headers.authorization',
+                'req.headers.cookie',
+                'req.body.password',
+                'req.body.newPassword',
+                'req.body.currentPassword',
+                'req.body.refreshToken',
+                'req.body.token',
+                'req.body.code',
+                'req.body.mfaCode',
+              ],
+              censor: '[redacted]',
+            },
+          },
   });
 
   const context: RouteContext = {
@@ -168,7 +172,9 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
       return reply.code(400).send({
         error: {
           code: 'validation_failed',
-          message: error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join(', '),
+          message: error.issues
+            .map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`)
+            .join(', '),
         },
       });
     }
@@ -240,10 +246,11 @@ async function registerWebInterface(app: FastifyInstance, config: Config): Promi
   // deployment answers an unknown path in the same `{ error: { code } }`
   // shape as every other failure. Ravelon clients parse that shape.
   app.setNotFoundHandler((request, reply) => {
-    const wantsPage = available
-      && (request.method === 'GET' || request.method === 'HEAD')
-      && !request.url.startsWith('/v1/')
-      && !request.url.startsWith('/healthz');
+    const wantsPage =
+      available &&
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      !request.url.startsWith('/v1/') &&
+      !request.url.startsWith('/healthz');
     if (!wantsPage) {
       return reply.code(404).send({
         error: { code: 'not_found', message: `No route for ${request.method} ${request.url}` },

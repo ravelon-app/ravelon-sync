@@ -23,19 +23,16 @@ import { useAccount, useAuth } from "../lib/auth";
 import { formatRelative, personLabel } from "../lib/format";
 import { useAction, useAsync, useDocumentTitle } from "../lib/hooks";
 import { useI18n } from "../lib/i18n";
-import type {
-  CreatedTeamInvite,
-  Team,
-  TeamInvite,
-  TeamMember,
-  TeamRole,
-  VaultRole,
-} from "../lib/types";
+import type { CreatedTeamInvite, Team, TeamInvite, TeamMember, TeamRole, VaultRole } from "../lib/types";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
 export function teamRoleLabel(t: Translate, role: TeamRole): string {
-  return role === "owner" ? t("teams.roleOwner") : role === "admin" ? t("teams.roleAdmin") : t("teams.roleMember");
+  return role === "owner"
+    ? t("teams.roleOwner")
+    : role === "admin"
+      ? t("teams.roleAdmin")
+      : t("teams.roleMember");
 }
 
 export function vaultRoleLabel(t: Translate, role: VaultRole): string {
@@ -98,7 +95,9 @@ export function Teams() {
                     {team.role === "owner" ? <Crown className="h-3.5 w-3.5 text-teal" /> : null}
                   </span>
                 }
-                description={t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members })}
+                description={t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", {
+                  count: team.members,
+                })}
               />
               <div className="flex-1 px-5 py-4">
                 <p className="label-caps mb-2">{t("nav.vaults")}</p>
@@ -226,20 +225,25 @@ function TeamDetailDialog({
 
   const removeMember = async (userId: string) => {
     if (!team) return;
-    await run(() => api.delete(`/v1/teams/${encodeURIComponent(team.id)}/members/${encodeURIComponent(userId)}`));
+    await run(() =>
+      api.delete(`/v1/teams/${encodeURIComponent(team.id)}/members/${encodeURIComponent(userId)}`),
+    );
     members.reload();
     onChanged();
   };
 
   const revokeInvite = async (inviteId: string) => {
     if (!team) return;
-    await run(() => api.delete(`/v1/teams/${encodeURIComponent(team.id)}/invites/${encodeURIComponent(inviteId)}`));
+    await run(() =>
+      api.delete(`/v1/teams/${encodeURIComponent(team.id)}/invites/${encodeURIComponent(inviteId)}`),
+    );
     invites.reload();
   };
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [name, setName] = useState(team?.name ?? "");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: switching to another team resets the dialog state
   useEffect(() => {
     setName(team?.name ?? "");
     setConfirmingDelete(false);
@@ -257,7 +261,9 @@ function TeamDetailDialog({
   const rename = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!team || !name.trim() || name.trim() === team.name) return;
-    const renamed = await run(() => api.patch(`/v1/teams/${encodeURIComponent(team.id)}`, { name: name.trim() }));
+    const renamed = await run(() =>
+      api.patch(`/v1/teams/${encodeURIComponent(team.id)}`, { name: name.trim() }),
+    );
     if (renamed !== undefined) onChanged();
   };
 
@@ -267,7 +273,11 @@ function TeamDetailDialog({
         open={Boolean(team) && !inviting && !created}
         onClose={onClose}
         title={team?.name ?? ""}
-        description={team ? t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members }) : undefined}
+        description={
+          team
+            ? t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members })
+            : undefined
+        }
         footer={
           confirmingDelete ? (
             <>
@@ -317,7 +327,12 @@ function TeamDetailDialog({
             <form onSubmit={rename} className="flex items-end gap-2">
               <div className="flex-1">
                 <Field label={t("teams.nameLabel")} htmlFor="team-name">
-                  <Input id="team-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} />
+                  <Input
+                    id="team-name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    maxLength={80}
+                  />
                 </Field>
               </div>
               <Button type="submit" loading={pending} disabled={!name.trim() || name.trim() === team?.name}>
@@ -351,9 +366,7 @@ function TeamDetailDialog({
                       <p className="truncate text-[13px] font-medium text-fg">
                         {personLabel(member)}
                         {member.id === account.user.id ? (
-                          <span className="ml-1.5 text-[12px] font-normal text-fg3">
-                            ({t("common.you")})
-                          </span>
+                          <span className="ml-1.5 text-[12px] font-normal text-fg3">({t("common.you")})</span>
                         ) : null}
                       </p>
                       <p className="text-[12px] text-fg3">
@@ -361,7 +374,9 @@ function TeamDetailDialog({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <Badge tone={member.role === "owner" ? "accent" : "neutral"}>{teamRoleLabel(t, member.role)}</Badge>
+                      <Badge tone={member.role === "owner" ? "accent" : "neutral"}>
+                        {teamRoleLabel(t, member.role)}
+                      </Badge>
                       {canAdmin && member.role !== "owner" ? (
                         <Button
                           size="sm"

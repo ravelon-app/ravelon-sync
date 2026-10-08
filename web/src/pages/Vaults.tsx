@@ -23,7 +23,10 @@ import { useAction, useAsync, useDocumentTitle } from "../lib/hooks";
 import { useI18n } from "../lib/i18n";
 import type { Vault, VaultMember, VaultRole } from "../lib/types";
 
-const ROLE_LABELS: Record<VaultRole, "vaults.roleOwner" | "vaults.roleAdmin" | "vaults.roleEditor" | "vaults.roleViewer"> = {
+const ROLE_LABELS: Record<
+  VaultRole,
+  "vaults.roleOwner" | "vaults.roleAdmin" | "vaults.roleEditor" | "vaults.roleViewer"
+> = {
   owner: "vaults.roleOwner",
   admin: "vaults.roleAdmin",
   editor: "vaults.roleEditor",
@@ -106,7 +109,9 @@ export function Vaults() {
                     <Td className="hidden text-right font-mono tabular-nums xl:table-cell">
                       {formatBytes(vault.storageBytes ?? 0)}
                     </Td>
-                    <Td className="hidden whitespace-nowrap xl:table-cell">{formatRelative(vault.updatedAt, locale)}</Td>
+                    <Td className="hidden whitespace-nowrap xl:table-cell">
+                      {formatRelative(vault.updatedAt, locale)}
+                    </Td>
                     <Td className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -206,7 +211,9 @@ function VaultMembersDialog({ vault, onClose }: { vault: Vault | null; onClose()
   const members = useAsync(
     (signal) =>
       vault
-        ? api.get<{ members: VaultMember[] }>(`/v1/vaults/${encodeURIComponent(vault.id)}/members`, { signal })
+        ? api.get<{ members: VaultMember[] }>(`/v1/vaults/${encodeURIComponent(vault.id)}/members`, {
+            signal,
+          })
         : Promise.resolve({ members: [] }),
     [vault?.id],
   );
@@ -321,7 +328,9 @@ function RenameVaultDialog({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!vault || !name.trim()) return;
-    const renamed = await run(() => api.patch(`/v1/vaults/${encodeURIComponent(vault.id)}`, { name: name.trim() }));
+    const renamed = await run(() =>
+      api.patch(`/v1/vaults/${encodeURIComponent(vault.id)}`, { name: name.trim() }),
+    );
     if (renamed === undefined) return;
     onRenamed();
     onClose();
@@ -343,7 +352,12 @@ function RenameVaultDialog({
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button onClick={onClose}>{t("common.cancel")}</Button>
-          <Button type="submit" variant="primary" loading={pending} disabled={!name.trim() || name.trim() === vault?.name}>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={pending}
+            disabled={!name.trim() || name.trim() === vault?.name}
+          >
             {t("common.rename")}
           </Button>
         </div>

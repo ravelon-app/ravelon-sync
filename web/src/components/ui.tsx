@@ -65,7 +65,9 @@ export function PageHeader({
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg">{title}</h1>
-        {description ? <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-fg2">{description}</p> : null}
+        {description ? (
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-fg2">{description}</p>
+        ) : null}
       </div>
       {action}
     </header>
@@ -88,8 +90,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   // a view exists for and nothing else.
   primary:
     "bg-teal text-ink hover:bg-teal-deep active:bg-teal-deep disabled:bg-teal/40 disabled:text-ink/60 font-semibold",
-  secondary:
-    "bg-raised text-fg border border-line hover:border-fg3/60 hover:bg-raised/70 disabled:text-fg3",
+  secondary: "bg-raised text-fg border border-line hover:border-fg3/60 hover:bg-raised/70 disabled:text-fg3",
   ghost: "text-fg2 hover:text-fg hover:bg-raised/70 disabled:text-fg3",
   danger:
     "bg-transparent text-danger border border-danger/40 hover:bg-danger/10 hover:border-danger/70 disabled:opacity-50",
@@ -156,11 +157,12 @@ const CONTROL_CLASS =
   "transition-colors duration-150 hover:border-fg3/50 focus:border-teal focus:outline-none " +
   "focus:ring-2 focus:ring-teal/25 disabled:cursor-not-allowed disabled:opacity-60";
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className, ...rest }, ref) {
-    return <input ref={ref} className={cx(CONTROL_CLASS, "h-10", className)} {...rest} />;
-  },
-);
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
+  { className, ...rest },
+  ref,
+) {
+  return <input ref={ref} className={cx(CONTROL_CLASS, "h-10", className)} {...rest} />;
+});
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   function Textarea({ className, ...rest }, ref) {
@@ -168,15 +170,16 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   },
 );
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  function Select({ className, children, ...rest }, ref) {
-    return (
-      <select ref={ref} className={cx(CONTROL_CLASS, "h-10 pr-8", className)} {...rest}>
-        {children}
-      </select>
-    );
-  },
-);
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select(
+  { className, children, ...rest },
+  ref,
+) {
+  return (
+    <select ref={ref} className={cx(CONTROL_CLASS, "h-10 pr-8", className)} {...rest}>
+      {children}
+    </select>
+  );
+});
 
 export function Toggle({
   checked,
@@ -253,7 +256,11 @@ export function Notice({
   const style = NOTICE_TONES[tone];
   return (
     <div
-      className={cx("flex gap-3 rounded-lg border px-4 py-3 text-[13px] leading-relaxed", style.wrap, className)}
+      className={cx(
+        "flex gap-3 rounded-lg border px-4 py-3 text-[13px] leading-relaxed",
+        style.wrap,
+        className,
+      )}
       role={tone === "danger" ? "alert" : undefined}
     >
       <span className="mt-0.5 shrink-0">{style.icon}</span>
@@ -314,7 +321,15 @@ export function LoadingBlock() {
   );
 }
 
-export function EmptyState({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
+export function EmptyState({
+  icon,
+  title,
+  children,
+}: {
+  icon?: ReactNode;
+  title: string;
+  children?: ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
       {icon ? <div className="text-fg3">{icon}</div> : null}
@@ -405,8 +420,8 @@ export function Dialog({
     // A field first: focusing the header's close button meant the first Enter
     // closed the dialog instead of submitting it.
     const focusable =
-      panelRef.current?.querySelector<HTMLElement>("input:not([disabled]), select, textarea")
-      ?? panelRef.current?.querySelector<HTMLElement>("button:not([disabled])");
+      panelRef.current?.querySelector<HTMLElement>("input:not([disabled]), select, textarea") ??
+      panelRef.current?.querySelector<HTMLElement>("button:not([disabled])");
     focusable?.focus();
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
@@ -466,6 +481,7 @@ export function DataList({ rows }: { rows: Array<{ label: ReactNode; value: Reac
   return (
     <dl className="divide-y divide-line-soft">
       {rows.map((row, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: rows are a fixed list with ReactNode labels and no stable id
         <div key={index} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-5 py-3">
           <dt className="text-[13px] text-fg2">{row.label}</dt>
           <dd className="text-[13px] font-medium text-fg">{row.value}</dd>

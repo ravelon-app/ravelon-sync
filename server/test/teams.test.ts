@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 
-import {
-  api,
-  register,
-  startTestServer,
-  syncItem,
-  type TestAccount,
-  type TestServer,
-} from './helpers.js';
+import { api, register, startTestServer, syncItem, type TestAccount, type TestServer } from './helpers.js';
 
 describe('teams and shared vaults', () => {
   let server: TestServer;
@@ -260,7 +253,9 @@ describe('personal vaults', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('host-a', vaultId, { clientRevision: 2, ciphertext: 'b64:c2Vjb25kLXZlcnNpb24tYnl0ZXM' })],
+        items: [
+          syncItem('host-a', vaultId, { clientRevision: 2, ciphertext: 'b64:c2Vjb25kLXZlcnNpb24tYnl0ZXM' }),
+        ],
       },
     });
 
@@ -303,7 +298,8 @@ describe('personal vaults', () => {
     const deleted = await api(server, 'DELETE', `/v1/vaults/${vaultId}`, { token: user.accessToken });
     assert.equal(deleted.status, 204);
 
-    const items = await server.db.prepare('SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ?')
+    const items = await server.db
+      .prepare('SELECT COUNT(*) AS count FROM sync_items WHERE vault_id = ?')
       .get<{ count: number }>(vaultId);
     assert.equal(Number(items?.count ?? 0), 0);
   });
@@ -381,7 +377,9 @@ describe('signing up from a team invitation', () => {
     const token = await teamInvite('revoked@example.com');
     const invites = await api(server, 'GET', `/v1/teams/${teamId}/invites`, { token: owner.accessToken });
     const pending = invites.body.invites.find((invite: any) => invite.email === 'revoked@example.com');
-    const revoked = await api(server, 'DELETE', `/v1/teams/${teamId}/invites/${pending.id}`, { token: owner.accessToken });
+    const revoked = await api(server, 'DELETE', `/v1/teams/${teamId}/invites/${pending.id}`, {
+      token: owner.accessToken,
+    });
     assert.ok(revoked.status === 200 || revoked.status === 204, `revoke answered ${revoked.status}`);
     const refused = await signUp('revoked@example.com', { teamInviteToken: token });
     assert.equal(refused.status, 404);

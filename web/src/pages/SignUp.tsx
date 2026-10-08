@@ -20,7 +20,9 @@ export function SignUp() {
   const next = safeNext(params.get("next"));
   // A team invitation admits its own address even where sign-up needs an
   // invitation; it arrives directly or inside the invitation page's "next".
-  const teamInviteToken = inviteToken ? undefined : params.get("team") ?? teamTokenFromNext(next) ?? undefined;
+  const teamInviteToken = inviteToken
+    ? undefined
+    : (params.get("team") ?? teamTokenFromNext(next) ?? undefined);
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -51,9 +53,7 @@ export function SignUp() {
     return (
       <AuthLayout title={t("auth.signUpTitle")}>
         <Notice tone="warn">
-          {config?.registrationMode === "closed"
-            ? t("auth.registrationClosed")
-            : t("auth.inviteRequired")}
+          {config?.registrationMode === "closed" ? t("auth.registrationClosed") : t("auth.inviteRequired")}
         </Notice>
         <Link
           to="/signin"

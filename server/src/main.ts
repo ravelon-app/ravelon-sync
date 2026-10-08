@@ -1,10 +1,10 @@
 import { buildServer } from './app.js';
-import { ConfigError, loadConfig, secretIsGenerated } from './config.js';
+import { type Config, ConfigError, loadConfig, secretIsGenerated } from './config.js';
 import { pruneAuditLog } from './lib/audit.js';
 import { readSetting } from './lib/settings.js';
 
 async function main(): Promise<void> {
-  let config;
+  let config: Config;
   try {
     config = loadConfig();
   } catch (error) {
@@ -19,8 +19,8 @@ async function main(): Promise<void> {
 
   if (secretIsGenerated(config.jwtSecret)) {
     app.log.warn(
-      'SYNC_JWT_SECRET is not set. A random one was generated for this process, '
-      + 'so every restart signs all clients out. Set it before running this for real.',
+      'SYNC_JWT_SECRET is not set. A random one was generated for this process, ' +
+        'so every restart signs all clients out. Set it before running this for real.',
     );
   }
 
@@ -82,6 +82,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`Ravelon Sync failed to start: ${error instanceof Error ? error.stack : String(error)}\n`);
+  process.stderr.write(
+    `Ravelon Sync failed to start: ${error instanceof Error ? error.stack : String(error)}\n`,
+  );
   process.exit(1);
 });

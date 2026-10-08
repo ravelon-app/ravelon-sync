@@ -67,7 +67,14 @@ export async function verifyReauth(
     if (!factor) {
       context.limiter.recordFailure(failKey);
       context.limiter.recordFailure(mfaUserFailKey(userId));
-      await audit(context.db, userId, 'auth.mfa_failed', `user:${userId}`, { stage: 'reauth' }, options.ip ?? null);
+      await audit(
+        context.db,
+        userId,
+        'auth.mfa_failed',
+        `user:${userId}`,
+        { stage: 'reauth' },
+        options.ip ?? null,
+      );
       throw new ApiError(400, 'invalid_mfa_code', 'That code is not valid');
     }
   }

@@ -143,6 +143,7 @@ npm run dev:web        # interface on http://localhost:5174, proxying the API
 ```bash
 npm test               # server and web suites
 npm run typecheck
+npm run lint           # Biome: lint and formatting check
 npm run build
 ```
 

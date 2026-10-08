@@ -5,14 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import type { WebSocket } from 'ws';
 
 import { MAX_SOCKETS_PER_USER } from '../src/lib/sync-events.js';
-import {
-  api,
-  register,
-  startTestServer,
-  syncItem,
-  type TestAccount,
-  type TestServer,
-} from './helpers.js';
+import { api, register, startTestServer, syncItem, type TestAccount, type TestServer } from './helpers.js';
 
 /** Ciphertext of a given size that the plaintext guard accepts. */
 function largeCiphertext(bytes: number): string {
@@ -51,7 +44,9 @@ async function openSocket(server: TestServer, vaultId: string, token: string) {
     {
       onInit: (ws) => {
         ws.on('message', (data: Buffer) => messages.push(JSON.parse(data.toString())));
-        ws.once('close', (code: number, reason: Buffer) => resolveClosed({ code, reason: reason.toString() }));
+        ws.once('close', (code: number, reason: Buffer) =>
+          resolveClosed({ code, reason: reason.toString() }),
+        );
       },
     },
   );
@@ -83,9 +78,11 @@ describe('sync protocol', () => {
     const vaultId = 'big-vault';
     // Fifteen records of about 700 KB: more than one 8 MiB page, far fewer
     // than the row limit, so only the byte budget can split them.
-    const items = Array.from({ length: 15 }, (_, index) => syncItem(`big-${index}`, vaultId, {
-      ciphertext: largeCiphertext(520 * 1024),
-    }));
+    const items = Array.from({ length: 15 }, (_, index) =>
+      syncItem(`big-${index}`, vaultId, {
+        ciphertext: largeCiphertext(520 * 1024),
+      }),
+    );
     const pushed = await api(server, 'POST', '/v1/sync/push', {
       token: user.accessToken,
       body: { vaultId, items },
@@ -199,9 +196,14 @@ describe('sync protocol', () => {
   test('watch with afterCursor answers at once when the caller is behind', async () => {
     const vaultId = 'watched-vault';
     const started = Date.now();
-    const response = await api(server, 'GET', `/v1/desktop/vault/watch?vaultId=${vaultId}&afterVersion=0&afterCursor=0`, {
-      token: user.accessToken,
-    });
+    const response = await api(
+      server,
+      'GET',
+      `/v1/desktop/vault/watch?vaultId=${vaultId}&afterVersion=0&afterCursor=0`,
+      {
+        token: user.accessToken,
+      },
+    );
     assert.equal(response.status, 200);
     assert.notEqual(response.body.cursor, '0');
     assert.ok(Date.now() - started < 2000);
@@ -258,11 +260,13 @@ describe('sync protocol', () => {
       token: user.accessToken,
       body: {
         vaultId,
-        items: [syncItem('h-1', vaultId, {
-          clientRevision: 9,
-          ciphertext: largeCiphertext(48),
-          baseRevision: first.body.results[0].revision,
-        })],
+        items: [
+          syncItem('h-1', vaultId, {
+            clientRevision: 9,
+            ciphertext: largeCiphertext(48),
+            baseRevision: first.body.results[0].revision,
+          }),
+        ],
       },
     });
     const versions = await api(server, 'GET', `/v1/vaults/${vaultId}/items/h-1/versions`, {
@@ -280,7 +284,10 @@ describe('sync protocol', () => {
     // must not silently undo the restore.
     const stale = await api(server, 'POST', '/v1/sync/push', {
       token: user.accessToken,
-      body: { vaultId, items: [syncItem('h-1', vaultId, { clientRevision: 9, ciphertext: largeCiphertext(48) })] },
+      body: {
+        vaultId,
+        items: [syncItem('h-1', vaultId, { clientRevision: 9, ciphertext: largeCiphertext(48) })],
+      },
     });
     assert.equal(stale.body.results[0].status, 'stale');
   });
@@ -391,7 +398,9 @@ describe('sync event sockets', () => {
     const sockets: WebSocket[] = [];
     for (let index = 0; index < MAX_SOCKETS_PER_USER; index += 1) {
       const opened = await openSocket(server, vaultId, owner.accessToken);
-      await waitFor(() => opened.messages.length > 0).catch((error) => { throw new Error(`socket ${index}: ${error}`); });
+      await waitFor(() => opened.messages.length > 0).catch((error) => {
+        throw new Error(`socket ${index}: ${error}`);
+      });
       sockets.push(opened.socket);
     }
     const extra = await openSocket(server, vaultId, owner.accessToken);
@@ -490,7 +499,9 @@ describe('hosted-only client features', () => {
     const config = await api(server, 'GET', '/v1/telemetry/ios/config');
     assert.equal(config.status, 200);
     assert.equal(config.body.enabled, false);
-    const forget = await api(server, 'POST', '/v1/telemetry/ios/forget', { body: { installId: 'install-1' } });
+    const forget = await api(server, 'POST', '/v1/telemetry/ios/forget', {
+      body: { installId: 'install-1' },
+    });
     assert.equal(forget.status, 200);
     // Uploads stay unanswered: nothing here would ever store them.
     const upload = await api(server, 'POST', '/v1/telemetry/ios', { body: { installId: 'install-1' } });

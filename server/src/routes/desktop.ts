@@ -58,13 +58,16 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
    */
   app.post('/v1/desktop-auth/start', async (request) => {
     limiter.hit(`pair-start:${clientIp(request)}`, config.rateLimit.authPerIpPerMin);
-    await db.prepare('DELETE FROM desktop_auth_requests WHERE expires_at <= ? OR consumed_at IS NOT NULL')
+    await db
+      .prepare('DELETE FROM desktop_auth_requests WHERE expires_at <= ? OR consumed_at IS NOT NULL')
       .run(nowIso());
 
-    const body = z.object({
-      deviceName: deviceNameSchema,
-      platform: platformSchema.default('desktop'),
-    }).parse(request.body);
+    const body = z
+      .object({
+        deviceName: deviceNameSchema,
+        platform: platformSchema.default('desktop'),
+      })
+      .parse(request.body);
 
     const id = newId();
     const pollToken = randomToken('dpt');
@@ -73,12 +76,14 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const userCode = `${randomDigits(3)}-${randomDigits(3)}`;
     const expiresAt = new Date(Date.now() + DESKTOP_AUTH_TTL_MS).toISOString();
 
-    await db.prepare(
-      `INSERT INTO desktop_auth_requests
+    await db
+      .prepare(
+        `INSERT INTO desktop_auth_requests
         (id, poll_token_hash, user_id, device_name, platform, status, user_code, mfa_verified,
          expires_at, created_at)
        VALUES (?, ?, NULL, ?, ?, 'pending', ?, 0, ?, ?)`,
-    ).run(id, sha256(pollToken), body.deviceName, body.platform, userCode, expiresAt, nowIso());
+      )
+      .run(id, sha256(pollToken), body.deviceName, body.platform, userCode, expiresAt, nowIso());
 
     return {
       requestId: id,
@@ -92,16 +97,18 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
 
   app.get('/v1/desktop-auth/request/:requestId', async (request) => {
     const { requestId } = z.object({ requestId: z.string().uuid() }).parse(request.params);
-    const row = await db.prepare(
-      'SELECT id, device_name, platform, status, user_code, expires_at FROM desktop_auth_requests WHERE id = ?',
-    ).get<{
-      id: string;
-      device_name: string;
-      platform: string;
-      status: string;
-      user_code: string;
-      expires_at: string;
-    }>(requestId);
+    const row = await db
+      .prepare(
+        'SELECT id, device_name, platform, status, user_code, expires_at FROM desktop_auth_requests WHERE id = ?',
+      )
+      .get<{
+        id: string;
+        device_name: string;
+        platform: string;
+        status: string;
+        user_code: string;
+        expires_at: string;
+      }>(requestId);
     if (!row) throw new ApiError(404, 'pairing_not_found', 'This pairing request was not found');
     const expired = Date.parse(row.expires_at) <= Date.now();
     return {
@@ -118,54 +125,73 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const auth = await requireAuth(db, config, request);
     limiter.hit(`pair-approve:${auth.user.id}`, config.rateLimit.authPerIpPerMin);
     await assertNotInMaintenance(context);
-    const body = z.object({
-      requestId: z.string().uuid(),
-      password: z.string().min(1).max(512),
-      mfaCode: mfaCodeSchema.optional(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        requestId: z.string().uuid(),
+        password: z.string().min(1).max(512),
+        mfaCode: mfaCodeSchema.optional(),
+      })
+      .parse(request.body);
 
     // Approving a pairing hands out a full session on a device that has not
     // authenticated at all, so the password, and the second factor where one
     // is enrolled, are checked again even though the caller holds a token.
     // Guesses count against the same per-account lockout as every other
     // sensitive change, so a stolen session cannot spread them across routes.
-    await verifyReauth(context, auth.user.id, auth.user.password_hash, {
-      password: body.password,
-      mfaCode: body.mfaCode,
-    }, { requireMfa: true, ip: clientIp(request) });
+    await verifyReauth(
+      context,
+      auth.user.id,
+      auth.user.password_hash,
+      {
+        password: body.password,
+        mfaCode: body.mfaCode,
+      },
+      { requireMfa: true, ip: clientIp(request) },
+    );
     const mfaVerified = await isMfaEnabled(db, auth.user.id);
 
-    const claimed = await db.prepare(
-      `UPDATE desktop_auth_requests
+    const claimed = await db
+      .prepare(
+        `UPDATE desktop_auth_requests
        SET user_id = ?, status = 'approved', approved_at = ?, mfa_verified = ?
        WHERE id = ? AND status = 'pending' AND expires_at > ?`,
-    ).run(auth.user.id, nowIso(), mfaVerified ? 1 : 0, body.requestId, nowIso());
+      )
+      .run(auth.user.id, nowIso(), mfaVerified ? 1 : 0, body.requestId, nowIso());
     if (claimed.changes !== 1) {
       throw new ApiError(409, 'pairing_unavailable', 'This pairing request expired or was already used');
     }
 
-    await audit(db, auth.user.id, 'device.pair_approved', `pairing:${body.requestId}`, null, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'device.pair_approved',
+      `pairing:${body.requestId}`,
+      null,
+      clientIp(request),
+    );
     return { approved: true, email: auth.user.email };
   });
 
   app.post('/v1/desktop-auth/exchange', async (request, reply) => {
-    const body = z.object({
-      requestId: z.string().uuid(),
-      pollToken: z.string().min(20).max(400),
-    }).parse(request.body);
+    const body = z
+      .object({
+        requestId: z.string().uuid(),
+        pollToken: z.string().min(20).max(400),
+      })
+      .parse(request.body);
 
-    const row = await db.prepare(
-      'SELECT * FROM desktop_auth_requests WHERE id = ? AND poll_token_hash = ?',
-    ).get<{
-      id: string;
-      user_id: string | null;
-      device_name: string;
-      platform: string;
-      status: string;
-      mfa_verified: number;
-      expires_at: string;
-      consumed_at: string | null;
-    }>(body.requestId, sha256(body.pollToken));
+    const row = await db
+      .prepare('SELECT * FROM desktop_auth_requests WHERE id = ? AND poll_token_hash = ?')
+      .get<{
+        id: string;
+        user_id: string | null;
+        device_name: string;
+        platform: string;
+        status: string;
+        mfa_verified: number;
+        expires_at: string;
+        consumed_at: string | null;
+      }>(body.requestId, sha256(body.pollToken));
     if (!row) throw new ApiError(401, 'pairing_invalid', 'This pairing request is invalid');
     if (Date.parse(row.expires_at) <= Date.now()) {
       throw new ApiError(410, 'pairing_expired', 'This pairing request expired');
@@ -178,10 +204,12 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const session = await db.transaction(async () => {
       // Claiming and issuing inside one transaction is what stops two clients
       // polling the same request from both getting a session.
-      const claimed = await db.prepare(
-        `UPDATE desktop_auth_requests SET status = 'consumed', consumed_at = ?
+      const claimed = await db
+        .prepare(
+          `UPDATE desktop_auth_requests SET status = 'consumed', consumed_at = ?
          WHERE id = ? AND status = 'approved' AND consumed_at IS NULL AND expires_at > ?`,
-      ).run(nowIso(), body.requestId, nowIso());
+        )
+        .run(nowIso(), body.requestId, nowIso());
       if (claimed.changes !== 1) {
         throw new ApiError(409, 'pairing_used', 'This pairing request was already used');
       }
@@ -192,10 +220,17 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     })();
 
     const bundle = await accountBundle(context, row.user_id);
-    await audit(db, row.user_id, 'device.paired', `device:${session.deviceId}`, {
-      deviceName: row.device_name,
-      platform: row.platform,
-    }, clientIp(request));
+    await audit(
+      db,
+      row.user_id,
+      'device.paired',
+      `device:${session.deviceId}`,
+      {
+        deviceName: row.device_name,
+        platform: row.platform,
+      },
+      clientIp(request),
+    );
 
     return {
       ...session,
@@ -234,7 +269,8 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const vault = query.vaultId
       ? await requireVaultAccess(db, auth.user.id, query.vaultId)
       : await ensurePersonalVault(db, auth.user.id);
-    const snapshot = await db.prepare('SELECT version, blob FROM desktop_vault_blobs WHERE vault_id = ?')
+    const snapshot = await db
+      .prepare('SELECT version, blob FROM desktop_vault_blobs WHERE vault_id = ?')
       .get<{ version: number; blob: string }>(vault.id);
     if (!snapshot) {
       throw new ApiError(404, 'sync_snapshot_not_found', 'No encrypted snapshot exists for this vault yet');
@@ -261,23 +297,26 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
   app.get('/v1/desktop/vault/watch', async (request) => {
     const auth = await requireAuth(db, config, request);
     limiter.hit(`watch:${auth.user.id}`, config.rateLimit.syncPerUserPerMin);
-    const query = z.object({
-      vaultId: z.string().min(1).max(160).optional(),
-      afterVersion: z.coerce.number().int().nonnegative().default(0),
-      // Granular clients wait on the sync cursor rather than the legacy
-      // snapshot version. Clients that sent their cursor as `afterVersion`
-      // were answered at once, every time, because a granular vault's snapshot
-      // version stays 0; they now send it here.
-      afterCursor: z.coerce.number().int().nonnegative().optional(),
-    }).parse(request.query);
+    const query = z
+      .object({
+        vaultId: z.string().min(1).max(160).optional(),
+        afterVersion: z.coerce.number().int().nonnegative().default(0),
+        // Granular clients wait on the sync cursor rather than the legacy
+        // snapshot version. Clients that sent their cursor as `afterVersion`
+        // were answered at once, every time, because a granular vault's snapshot
+        // version stays 0; they now send it here.
+        afterCursor: z.coerce.number().int().nonnegative().optional(),
+      })
+      .parse(request.query);
     const vault = query.vaultId
       ? await requireVaultAccess(db, auth.user.id, query.vaultId)
       : await ensurePersonalVault(db, auth.user.id);
 
     const current = await snapshotStatus(context, vault.id);
-    const behind = query.afterCursor !== undefined
-      ? current.cursor !== String(query.afterCursor)
-      : current.version !== query.afterVersion || current.exists !== (query.afterVersion > 0);
+    const behind =
+      query.afterCursor !== undefined
+        ? current.cursor !== String(query.afterCursor)
+        : current.version !== query.afterVersion || current.exists !== query.afterVersion > 0;
     if (behind) return current;
     // Each held request is an open connection. A client needs one per watched
     // vault; more than a handful means a runaway loop, which is answered
@@ -299,11 +338,16 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const auth = await requireAuth(db, config, request);
     await assertCanSync(context, Boolean(auth.user.email_verified));
     await assertNotInMaintenance(context);
-    const body = z.object({
-      vaultId: z.string().min(1).max(160).optional(),
-      baseVersion: z.number().int().nonnegative(),
-      blob: z.string().min(1).max(20 * 1024 * 1024),
-    }).parse(request.body);
+    const body = z
+      .object({
+        vaultId: z.string().min(1).max(160).optional(),
+        baseVersion: z.number().int().nonnegative(),
+        blob: z
+          .string()
+          .min(1)
+          .max(20 * 1024 * 1024),
+      })
+      .parse(request.body);
 
     const vault = body.vaultId
       ? await requireVaultAccess(db, auth.user.id, body.vaultId)
@@ -315,9 +359,9 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
     const version = await db.transaction(async () => {
       // Read-then-write on both the version counter and the storage quota.
       await lockSection(db, 'vault_storage');
-      const current = await db.prepare(
-        'SELECT version, LENGTH(blob) AS blob_size FROM desktop_vault_blobs WHERE vault_id = ?',
-      ).get<{ version: number; blob_size: number }>(vault.id);
+      const current = await db
+        .prepare('SELECT version, LENGTH(blob) AS blob_size FROM desktop_vault_blobs WHERE vault_id = ?')
+        .get<{ version: number; blob_size: number }>(vault.id);
       const currentVersion = Number(current?.version ?? 0);
       // Compare-and-swap on the whole snapshot: without it, two devices that
       // both uploaded would silently overwrite each other's entire vault.
@@ -329,7 +373,7 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
         );
       }
       const added = encodedBytes(body.blob) - Number(current?.blob_size ?? 0);
-      if (await vaultStorageBytes(db, vault.id) + Math.max(0, added) > config.limits.vaultStorageBytes) {
+      if ((await vaultStorageBytes(db, vault.id)) + Math.max(0, added) > config.limits.vaultStorageBytes) {
         throw new ApiError(
           413,
           'vault_storage_quota_reached',
@@ -337,19 +381,28 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
         );
       }
       const next = currentVersion + 1;
-      await db.prepare(
-        `INSERT INTO desktop_vault_blobs (vault_id, version, blob, updated_at, updated_by_user_id)
+      await db
+        .prepare(
+          `INSERT INTO desktop_vault_blobs (vault_id, version, blob, updated_at, updated_by_user_id)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(vault_id) DO UPDATE SET
            version = excluded.version,
            blob = excluded.blob,
            updated_at = excluded.updated_at,
            updated_by_user_id = excluded.updated_by_user_id`,
-      ).run(vault.id, next, body.blob, nowIso(), auth.user.id);
+        )
+        .run(vault.id, next, body.blob, nowIso(), auth.user.id);
       return next;
     })();
 
-    await audit(db, auth.user.id, 'sync.snapshot_upload', `vault:${vault.id}`, { version }, clientIp(request));
+    await audit(
+      db,
+      auth.user.id,
+      'sync.snapshot_upload',
+      `vault:${vault.id}`,
+      { version },
+      clientIp(request),
+    );
     syncEvents.publish({
       type: 'vaultChanged',
       vaultId: vault.id,
@@ -360,9 +413,9 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
 }
 
 async function snapshotStatus(context: RouteContext, vaultId: string) {
-  const row = await context.db.prepare(
-    'SELECT version, updated_at FROM desktop_vault_blobs WHERE vault_id = ?',
-  ).get<{ version: number; updated_at: string }>(vaultId);
+  const row = await context.db
+    .prepare('SELECT version, updated_at FROM desktop_vault_blobs WHERE vault_id = ?')
+    .get<{ version: number; updated_at: string }>(vaultId);
   // `cursor` is the granular head, so one request tells a client both whether
   // a legacy snapshot exists and whether it has missed a granular change.
   const cursor = String(await vaultCursor(context.db, vaultId));

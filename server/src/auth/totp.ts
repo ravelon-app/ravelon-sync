@@ -53,12 +53,12 @@ export function totpCodeAtStep(secret: string, step: number): string {
   counter.writeBigUInt64BE(BigInt(step));
   const digest = createHmac('sha1', base32Decode(secret)).update(counter).digest();
   const offset = digest[digest.length - 1] & 0x0f;
-  const binary = (
-    ((digest[offset] & 0x7f) << 24)
-    | ((digest[offset + 1] & 0xff) << 16)
-    | ((digest[offset + 2] & 0xff) << 8)
-    | (digest[offset + 3] & 0xff)
-  ) >>> 0;
+  const binary =
+    (((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff)) >>>
+    0;
   return String(binary % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, '0');
 }
 

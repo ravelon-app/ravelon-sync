@@ -63,7 +63,13 @@ afterEach(() => {
 describe("refreshSession", () => {
   test("uses the token another tab stored rather than the stale copy in memory", async () => {
     const api = await loadApi();
-    api.adoptSession({ accessToken: "a1", refreshToken: "rft_tab_a", expiresIn: 900, deviceId: "d", userId: "u" });
+    api.adoptSession({
+      accessToken: "a1",
+      refreshToken: "rft_tab_a",
+      expiresIn: 900,
+      deviceId: "d",
+      userId: "u",
+    });
     // Another tab rotated the shared token after this tab read it.
     storage.setItem(STORAGE_KEY, "rft_rotated_by_tab_b");
     fetchMock.mockResolvedValueOnce(sessionResponse("rft_next"));
@@ -79,9 +85,11 @@ describe("refreshSession", () => {
     const api = await loadApi();
     storage.setItem(STORAGE_KEY, "rft_only");
     let release!: (response: Response) => void;
-    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => {
-      release = resolve;
-    }));
+    fetchMock.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        release = resolve;
+      }),
+    );
 
     const first = api.refreshSession();
     const second = api.refreshSession();
@@ -115,7 +123,13 @@ describe("refreshSession", () => {
 
   test("does not sign out when a refresh fails on the network", async () => {
     const api = await loadApi();
-    api.adoptSession({ accessToken: "a", refreshToken: "rft_keep", expiresIn: 900, deviceId: "d", userId: "u" });
+    api.adoptSession({
+      accessToken: "a",
+      refreshToken: "rft_keep",
+      expiresIn: 900,
+      deviceId: "d",
+      userId: "u",
+    });
     fetchMock.mockRejectedValueOnce(new TypeError("offline"));
 
     await expect(api.refreshSession()).rejects.toThrow("offline");
@@ -164,7 +178,13 @@ describe("applyStoredRefreshToken", () => {
 describe("request", () => {
   test("retries once after refreshing an expired access token", async () => {
     const api = await loadApi();
-    api.adoptSession({ accessToken: "old", refreshToken: "rft_1", expiresIn: 900, deviceId: "d", userId: "u" });
+    api.adoptSession({
+      accessToken: "old",
+      refreshToken: "rft_1",
+      expiresIn: 900,
+      deviceId: "d",
+      userId: "u",
+    });
     fetchMock
       .mockResolvedValueOnce(errorResponse(401, "invalid_token"))
       .mockResolvedValueOnce(sessionResponse("rft_2", "new"))
@@ -179,8 +199,9 @@ describe("request", () => {
     api.adoptSession({ accessToken: "a", refreshToken: "rft_1", expiresIn: 900, deviceId: "d", userId: "u" });
     fetchMock.mockResolvedValue(errorResponse(401, "invalid_credentials"));
 
-    await expect(api.request("/v1/account", { method: "DELETE", body: { password: "typo" } }))
-      .rejects.toMatchObject({ code: "invalid_credentials" });
+    await expect(
+      api.request("/v1/account", { method: "DELETE", body: { password: "typo" } }),
+    ).rejects.toMatchObject({ code: "invalid_credentials" });
     // One request, no refresh and no resend that would count the typo twice.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(api.getSession()).not.toBeNull();
@@ -190,7 +211,9 @@ describe("request", () => {
     const api = await loadApi();
     api.adoptSession({ accessToken: "a", refreshToken: "rft_1", expiresIn: 900, deviceId: "d", userId: "u" });
     fetchMock.mockImplementation(async (url: string) =>
-      url === "/v1/auth/refresh" ? sessionResponse(`rft_${fetchMock.mock.calls.length}`) : errorResponse(401, "invalid_token"),
+      url === "/v1/auth/refresh"
+        ? sessionResponse(`rft_${fetchMock.mock.calls.length}`)
+        : errorResponse(401, "invalid_token"),
     );
 
     await expect(api.request("/v1/account/me")).rejects.toMatchObject({ code: "invalid_token" });

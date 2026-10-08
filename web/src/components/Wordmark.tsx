@@ -7,15 +7,7 @@ import { cx } from "./ui";
  * mark stays fixed and is what makes a Ravelon Sync deployment recognisable
  * regardless of what it was named.
  */
-export function Wordmark({
-  name,
-  compact,
-  large,
-}: {
-  name: string;
-  compact?: boolean;
-  large?: boolean;
-}) {
+export function Wordmark({ name, compact, large }: { name: string; compact?: boolean; large?: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       <Mark className={large ? "h-8 w-8" : "h-6 w-6"} />

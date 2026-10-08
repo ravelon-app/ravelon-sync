@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/app.js';
 import { type Config, loadConfig } from '../src/config.js';
 import { type AppDatabase, openDatabase } from '../src/db/database.js';
-import { SyncEventHub } from '../src/lib/sync-events.js';
+import type { SyncEventHub } from '../src/lib/sync-events.js';
 
 export interface TestServer {
   app: FastifyInstance;

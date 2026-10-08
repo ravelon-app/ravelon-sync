@@ -93,10 +93,6 @@ export function emailVerificationRequired(platform: PlatformSettings): boolean {
 export async function assertCanSync(context: RouteContext, userEmailVerified: boolean): Promise<void> {
   const platform = await readSetting(context.db, 'platform');
   if (emailVerificationRequired(platform) && !userEmailVerified) {
-    throw new ApiError(
-      403,
-      'email_verification_required',
-      'Confirm your email address before syncing',
-    );
+    throw new ApiError(403, 'email_verification_required', 'Confirm your email address before syncing');
   }
 }

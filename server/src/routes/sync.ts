@@ -60,10 +60,12 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     await assertCanSync(context, Boolean(auth.user.email_verified));
     await assertNotInMaintenance(context);
 
-    const body = z.object({
-      vaultId: z.string().min(1).max(160),
-      items: z.array(syncItemSchema).max(SYNC_PUSH_MAX_ITEMS),
-    }).parse(request.body);
+    const body = z
+      .object({
+        vaultId: z.string().min(1).max(160),
+        items: z.array(syncItemSchema).max(SYNC_PUSH_MAX_ITEMS),
+      })
+      .parse(request.body);
 
     const vault = await ensureVaultForClientId(db, config, auth.user.id, body.vaultId);
     if (!vaultRoleCanWrite(vault.member_role)) {
@@ -81,12 +83,14 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       for (const item of items) {
         validateSyncItem(item, body.vaultId);
 
-        const existing = await db.prepare(
-          `SELECT vault_id, item_id, item_type, ciphertext, nonce, schema_version,
+        const existing = await db
+          .prepare(
+            `SELECT vault_id, item_id, item_type, ciphertext, nonce, schema_version,
                   client_revision, updated_at, deleted_at, restored_at, cursor, stored_at,
                   LENGTH(ciphertext) AS ciphertext_size, LENGTH(nonce) AS nonce_size
            FROM sync_items WHERE vault_id = ? AND item_id = ?`,
-        ).get<ExistingSyncItemRow>(vault.id, item.id);
+          )
+          .get<ExistingSyncItemRow>(vault.id, item.id);
 
         // Compare-and-swap path: the client told us what it based this edit
         // on, so a mismatch is a real conflict and it gets our version back.
@@ -106,9 +110,9 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
 
         // Last-writer-wins path, for clients that send no baseRevision.
         if (
-          existing
-          && item.baseRevision === undefined
-          && compareRevision(
+          existing &&
+          item.baseRevision === undefined &&
+          compareRevision(
             item.clientRevision,
             item.updatedAt,
             Number(existing.client_revision),
@@ -127,9 +131,7 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
         // A version row is kept alongside the item, so the quota counts the
         // new bytes twice and only reclaims what this write replaces.
         const itemBytes = encodedBytes(item.ciphertext, item.nonce);
-        const replacedBytes = existing
-          ? Number(existing.ciphertext_size) + Number(existing.nonce_size)
-          : 0;
+        const replacedBytes = existing ? Number(existing.ciphertext_size) + Number(existing.nonce_size) : 0;
         const addedBytes = itemBytes * 2 - replacedBytes;
         if (storageBytes + Math.max(0, addedBytes) > config.limits.vaultStorageBytes) {
           throw new ApiError(
@@ -142,8 +144,9 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
 
         const cursor = await nextCursor(db);
         const storedAt = nowIso();
-        await db.prepare(
-          `INSERT INTO sync_items
+        await db
+          .prepare(
+            `INSERT INTO sync_items
             (vault_id, item_id, item_type, ciphertext, nonce, schema_version,
              client_revision, updated_at, deleted_at, restored_at, cursor, stored_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
@@ -158,37 +161,42 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
              restored_at = NULL,
              cursor = excluded.cursor,
              stored_at = excluded.stored_at`,
-        ).run(
-          vault.id,
-          item.id,
-          item.itemType,
-          item.ciphertext,
-          item.nonce,
-          item.schemaVersion,
-          item.clientRevision,
-          item.updatedAt,
-          item.deletedAt ?? null,
-          cursor,
-          storedAt,
-        );
+          )
+          .run(
+            vault.id,
+            item.id,
+            item.itemType,
+            item.ciphertext,
+            item.nonce,
+            item.schemaVersion,
+            item.clientRevision,
+            item.updatedAt,
+            item.deletedAt ?? null,
+            cursor,
+            storedAt,
+          );
 
-        await insertSyncVersion(db, {
-          vaultId: vault.id,
-          itemId: item.id,
-          itemType: item.itemType,
-          ciphertext: item.ciphertext,
-          nonce: item.nonce,
-          schemaVersion: item.schemaVersion,
-          clientRevision: item.clientRevision,
-          updatedAt: item.updatedAt,
-          deletedAt: item.deletedAt ?? null,
-          restoredAt: null,
-          versionCursor: cursor,
-          storedAt,
-          actorUserId: auth.user.id,
-          deviceId: auth.deviceId,
-          reason: item.deletedAt ? 'sync_delete' : 'sync_push',
-        }, platform.itemVersionsKept);
+        await insertSyncVersion(
+          db,
+          {
+            vaultId: vault.id,
+            itemId: item.id,
+            itemType: item.itemType,
+            ciphertext: item.ciphertext,
+            nonce: item.nonce,
+            schemaVersion: item.schemaVersion,
+            clientRevision: item.clientRevision,
+            updatedAt: item.updatedAt,
+            deletedAt: item.deletedAt ?? null,
+            restoredAt: null,
+            versionCursor: cursor,
+            storedAt,
+            actorUserId: auth.user.id,
+            deviceId: auth.deviceId,
+            reason: item.deletedAt ? 'sync_delete' : 'sync_push',
+          },
+          platform.itemVersionsKept,
+        );
 
         results.push({ id: item.id, status: 'stored', revision: cursor });
       }
@@ -200,10 +208,17 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       await db.prepare('UPDATE vaults SET updated_at = ? WHERE id = ?').run(nowIso(), vault.id);
       // Deliberately no per-item audit line: it would grow without bound and
       // record nothing an operator can act on. Counts are enough.
-      await audit(db, auth.user.id, 'sync.push', `vault:${vault.id}`, {
-        stored,
-        total: results.length,
-      }, clientIp(request));
+      await audit(
+        db,
+        auth.user.id,
+        'sync.push',
+        `vault:${vault.id}`,
+        {
+          stored,
+          total: results.length,
+        },
+        clientIp(request),
+      );
       syncEvents.publish({ type: 'vaultChanged', vaultId: vault.id, cursor });
     }
     return { cursor, results };
@@ -220,10 +235,12 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     limiter.hit(`sync:${auth.user.id}`, config.rateLimit.syncPerUserPerMin);
     await assertCanSync(context, Boolean(auth.user.email_verified));
 
-    const query = z.object({
-      vaultId: z.string().min(1).max(160),
-      cursor: z.coerce.number().int().nonnegative().default(0),
-    }).parse(request.query);
+    const query = z
+      .object({
+        vaultId: z.string().min(1).max(160),
+        cursor: z.coerce.number().int().nonnegative().default(0),
+      })
+      .parse(request.query);
 
     const vault = await requireVaultAccess(db, auth.user.id, query.vaultId);
 
@@ -233,12 +250,14 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     // the head afterwards instead could report a cursor for a record that
     // committed between the two statements and was never sent.
     const head = await vaultCursor(db, vault.id);
-    const window = await db.prepare(
-      `SELECT cursor, LENGTH(ciphertext) + LENGTH(nonce) AS size FROM sync_items
+    const window = await db
+      .prepare(
+        `SELECT cursor, LENGTH(ciphertext) + LENGTH(nonce) AS size FROM sync_items
        WHERE vault_id = ? AND cursor > ? AND cursor <= ?
        ORDER BY cursor ASC
        LIMIT ?`,
-    ).all<{ cursor: number; size: number }>(vault.id, query.cursor, head, SYNC_PULL_PAGE_SIZE + 1);
+      )
+      .all<{ cursor: number; size: number }>(vault.id, query.cursor, head, SYNC_PULL_PAGE_SIZE + 1);
 
     let last = query.cursor;
     let bytes = 0;
@@ -252,11 +271,16 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       last = Number(row.cursor);
     }
     const hasMore = taken < window.length;
-    const page = taken === 0 ? [] : await db.prepare(
-      `SELECT * FROM sync_items
+    const page =
+      taken === 0
+        ? []
+        : await db
+            .prepare(
+              `SELECT * FROM sync_items
        WHERE vault_id = ? AND cursor > ? AND cursor <= ?
        ORDER BY cursor ASC`,
-    ).all<SyncItemRow>(vault.id, query.cursor, last);
+            )
+            .all<SyncItemRow>(vault.id, query.cursor, last);
 
     // A partial page reports its last row so the next request continues from
     // there; a final page reports the head read above, which also carries the
@@ -297,15 +321,18 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
         // every few minutes and clients reconnect on their own schedule. What
         // is re-checked is what an operator or owner can take away.
         revalidate: async () => {
-          const user = await db.prepare('SELECT disabled FROM users WHERE id = ?')
+          const user = await db
+            .prepare('SELECT disabled FROM users WHERE id = ?')
             .get<{ disabled: number }>(userId);
           if (!user || user.disabled) return 'unauthorized';
-          const live = await db.prepare(
-            `SELECT rt.id FROM refresh_tokens rt
+          const live = await db
+            .prepare(
+              `SELECT rt.id FROM refresh_tokens rt
              JOIN devices d ON d.id = rt.device_id
              WHERE d.id = ? AND d.user_id = ? AND rt.revoked_at IS NULL AND rt.expires_at > ?
              LIMIT 1`,
-          ).get(deviceId, userId, nowIso());
+            )
+            .get(deviceId, userId, nowIso());
           if (!live) return 'unauthorized';
           if (!(await getVaultAccess(db, userId, vault.id))) return 'vault_not_accessible';
           return null;
@@ -313,11 +340,13 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       });
       // An immediate first message lets a client that reconnected after a
       // restart notice a cursor it missed without waiting for the next change.
-      socket.send(JSON.stringify({
-        type: 'vaultChanged',
-        vaultId: vault.id,
-        cursor: String(await vaultCursor(db, vault.id)),
-      }));
+      socket.send(
+        JSON.stringify({
+          type: 'vaultChanged',
+          vaultId: vault.id,
+          cursor: String(await vaultCursor(db, vault.id)),
+        }),
+      );
     })().catch((error: unknown) => {
       socket.close(1008, socketCloseReason(error));
     });
@@ -334,16 +363,18 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     const auth = await requireAuth(db, config, request);
     await assertCanSync(context, Boolean(auth.user.email_verified));
     await assertNotInMaintenance(context);
-    const body = z.object({
-      vaultId: z.string().min(1).max(160),
-      material: z.record(z.string(), z.unknown()),
-      // "Create, never replace." Two first devices of one account can both find
-      // no envelope and both mint a secret; without this the later PUT would
-      // silently overwrite the earlier one and the two devices would encrypt
-      // under different keys. With it, the second PUT is refused with 409 and
-      // that device adopts the envelope that won.
-      ifAbsent: z.boolean().optional(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        vaultId: z.string().min(1).max(160),
+        material: z.record(z.string(), z.unknown()),
+        // "Create, never replace." Two first devices of one account can both find
+        // no envelope and both mint a secret; without this the later PUT would
+        // silently overwrite the earlier one and the two devices would encrypt
+        // under different keys. With it, the second PUT is refused with 409 and
+        // that device adopts the envelope that won.
+        ifAbsent: z.boolean().optional(),
+      })
+      .parse(request.body);
 
     const vault = await requireVaultAccess(db, auth.user.id, body.vaultId);
     assertOpaqueKeyMaterial(body.material);
@@ -353,22 +384,26 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       throw new ApiError(413, 'key_material_too_large', 'Vault key material is too large');
     }
     if (body.ifAbsent) {
-      const inserted = await db.prepare(
-        `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
+      const inserted = await db
+        .prepare(
+          `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(vault_id, user_id) DO NOTHING`,
-      ).run(vault.id, auth.user.id, serialized, nowIso());
+        )
+        .run(vault.id, auth.user.id, serialized, nowIso());
       if (inserted.changes === 0) {
         throw new ApiError(409, 'key_material_exists', 'Key material for this vault already exists');
       }
     } else {
-      await db.prepare(
-        `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
+      await db
+        .prepare(
+          `INSERT INTO vault_user_key_material (vault_id, user_id, material_json, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(vault_id, user_id) DO UPDATE SET
            material_json = excluded.material_json,
            updated_at = excluded.updated_at`,
-      ).run(vault.id, auth.user.id, serialized, nowIso());
+        )
+        .run(vault.id, auth.user.id, serialized, nowIso());
     }
     await audit(db, auth.user.id, 'vault.key_material_updated', `vault:${vault.id}`, null, clientIp(request));
     return { stored: true };
@@ -379,9 +414,11 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     await assertCanSync(context, Boolean(auth.user.email_verified));
     const query = z.object({ vaultId: z.string().min(1).max(160) }).parse(request.query);
     const vault = await requireVaultAccess(db, auth.user.id, query.vaultId);
-    const row = await db.prepare(
-      'SELECT material_json, updated_at FROM vault_user_key_material WHERE vault_id = ? AND user_id = ?',
-    ).get<{ material_json: string; updated_at: string }>(vault.id, auth.user.id);
+    const row = await db
+      .prepare(
+        'SELECT material_json, updated_at FROM vault_user_key_material WHERE vault_id = ? AND user_id = ?',
+      )
+      .get<{ material_json: string; updated_at: string }>(vault.id, auth.user.id);
     if (!row) throw new ApiError(404, 'key_material_not_found', 'No key material stored for this vault');
     return {
       vaultId: vault.id,

@@ -97,7 +97,9 @@ export function Overview() {
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-medium text-fg">{vault.name}</p>
                       <p className="mt-0.5 text-[12px] text-fg3">
-                        {t((vault.itemCount ?? 0) === 1 ? "vaults.recordsOne" : "vaults.records", { count: formatNumber(vault.itemCount ?? 0, locale) })}
+                        {t((vault.itemCount ?? 0) === 1 ? "vaults.recordsOne" : "vaults.records", {
+                          count: formatNumber(vault.itemCount ?? 0, locale),
+                        })}
                         {" · "}
                         {formatRelative(vault.updatedAt, locale)}
                       </p>
@@ -168,7 +170,9 @@ export function Overview() {
                   <li key={team.id} className="flex items-center justify-between gap-4 px-5 py-3">
                     <p className="truncate text-[13px] font-medium text-fg">{team.name}</p>
                     <span className="shrink-0 text-[12px] text-fg3">
-                      {t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", { count: team.members })}
+                      {t(team.members === 1 ? "teams.memberCountOne" : "teams.memberCount", {
+                        count: team.members,
+                      })}
                     </span>
                   </li>
                 ))}

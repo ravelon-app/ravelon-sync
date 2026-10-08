@@ -16,18 +16,12 @@ export async function audit(
   detail: Record<string, unknown> | null,
   ip: string | null,
 ): Promise<void> {
-  await db.prepare(
-    `INSERT INTO audit_log (id, actor_user_id, action, target, detail_json, ip, created_at)
+  await db
+    .prepare(
+      `INSERT INTO audit_log (id, actor_user_id, action, target, detail_json, ip, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    newId(),
-    actorUserId,
-    action,
-    target,
-    detail ? JSON.stringify(detail) : null,
-    ip,
-    nowIso(),
-  );
+    )
+    .run(newId(), actorUserId, action, target, detail ? JSON.stringify(detail) : null, ip, nowIso());
 }
 
 /** Removes audit lines older than the configured retention. */

@@ -1,12 +1,7 @@
 import { type Config, newId, nowIso } from '../config.js';
 import { type AppDatabase, lockSection, scalar } from '../db/database.js';
 import { ApiError } from './errors.js';
-import type {
-  TeamAccessRow,
-  TeamRole,
-  VaultAccessRow,
-  VaultRole,
-} from './rows.js';
+import type { TeamAccessRow, TeamRole, VaultAccessRow, VaultRole } from './rows.js';
 
 export const VAULT_ROLES: readonly VaultRole[] = ['owner', 'admin', 'editor', 'viewer'];
 
@@ -27,12 +22,14 @@ export async function getVaultAccess(
   userId: string,
   vaultId: string,
 ): Promise<VaultAccessRow | undefined> {
-  return await db.prepare(
-    `SELECT v.*, vm.role AS member_role
+  return await db
+    .prepare(
+      `SELECT v.*, vm.role AS member_role
      FROM vaults v
      JOIN vault_members vm ON vm.vault_id = v.id
      WHERE v.id = ? AND vm.user_id = ?`,
-  ).get<VaultAccessRow>(vaultId, userId);
+    )
+    .get<VaultAccessRow>(vaultId, userId);
 }
 
 export async function requireVaultAccess(
@@ -59,17 +56,16 @@ export async function requireVaultWrite(
   return vault;
 }
 
-export async function listAccessibleVaults(
-  db: AppDatabase,
-  userId: string,
-): Promise<VaultAccessRow[]> {
-  return await db.prepare(
-    `SELECT v.*, vm.role AS member_role
+export async function listAccessibleVaults(db: AppDatabase, userId: string): Promise<VaultAccessRow[]> {
+  return await db
+    .prepare(
+      `SELECT v.*, vm.role AS member_role
      FROM vaults v
      JOIN vault_members vm ON vm.vault_id = v.id
      WHERE vm.user_id = ?
      ORDER BY v.kind ASC, v.created_at ASC, v.id ASC`,
-  ).all<VaultAccessRow>(userId);
+    )
+    .all<VaultAccessRow>(userId);
 }
 
 export async function ensureVaultMember(
@@ -79,11 +75,13 @@ export async function ensureVaultMember(
   role: VaultRole,
 ): Promise<void> {
   const now = nowIso();
-  await db.prepare(
-    `INSERT INTO vault_members (vault_id, user_id, role, created_at, updated_at)
+  await db
+    .prepare(
+      `INSERT INTO vault_members (vault_id, user_id, role, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(vault_id, user_id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`,
-  ).run(vaultId, userId, role, now, now);
+    )
+    .run(vaultId, userId, role, now, now);
 }
 
 /** Creates the personal vault every account starts with. */
@@ -92,21 +90,25 @@ export async function ensurePersonalVault(
   userId: string,
   name = 'Personal Vault',
 ): Promise<VaultAccessRow> {
-  const existing = await db.prepare(
-    `SELECT v.*, vm.role AS member_role
+  const existing = await db
+    .prepare(
+      `SELECT v.*, vm.role AS member_role
      FROM vaults v
      JOIN vault_members vm ON vm.vault_id = v.id
      WHERE vm.user_id = ? AND v.kind = 'personal' AND v.user_id = ?
      ORDER BY v.created_at ASC`,
-  ).get<VaultAccessRow>(userId, userId);
+    )
+    .get<VaultAccessRow>(userId, userId);
   if (existing) return existing;
 
   const id = newId();
   const now = nowIso();
-  await db.prepare(
-    `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
+  await db
+    .prepare(
+      `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
      VALUES (?, ?, ?, 'personal', NULL, ?, ?, ?)`,
-  ).run(id, userId, name, userId, now, now);
+    )
+    .run(id, userId, name, userId, now, now);
   await ensureVaultMember(db, id, userId, 'owner');
   return (await getVaultAccess(db, userId, id))!;
 }
@@ -139,10 +141,12 @@ export async function ensureVaultForClientId(
 
     await assertVaultCreationAvailable(db, config, userId);
     const now = nowIso();
-    await db.prepare(
-      `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
+    await db
+      .prepare(
+        `INSERT INTO vaults (id, user_id, name, kind, team_id, created_by_user_id, created_at, updated_at)
        VALUES (?, ?, 'Personal Vault', 'personal', NULL, ?, ?, ?)`,
-    ).run(clientVaultId, userId, userId, now, now);
+      )
+      .run(clientVaultId, userId, userId, now, now);
     await ensureVaultMember(db, clientVaultId, userId, 'owner');
   })();
   const created = await getVaultAccess(db, userId, clientVaultId);
@@ -189,12 +193,14 @@ export async function getTeamAccess(
   userId: string,
   teamId: string,
 ): Promise<TeamAccessRow | undefined> {
-  return await db.prepare(
-    `SELECT t.*, tm.role AS member_role, tm.default_vault_role
+  return await db
+    .prepare(
+      `SELECT t.*, tm.role AS member_role, tm.default_vault_role
      FROM teams t
      JOIN team_members tm ON tm.team_id = t.id
      WHERE t.id = ? AND tm.user_id = ?`,
-  ).get<TeamAccessRow>(teamId, userId);
+    )
+    .get<TeamAccessRow>(teamId, userId);
 }
 
 export async function requireTeamAccess(
@@ -232,13 +238,15 @@ export async function requireTeamOwner(
 }
 
 export async function listAccessibleTeams(db: AppDatabase, userId: string): Promise<TeamAccessRow[]> {
-  return await db.prepare(
-    `SELECT t.*, tm.role AS member_role, tm.default_vault_role
+  return await db
+    .prepare(
+      `SELECT t.*, tm.role AS member_role, tm.default_vault_role
      FROM teams t
      JOIN team_members tm ON tm.team_id = t.id
      WHERE tm.user_id = ?
      ORDER BY t.created_at ASC`,
-  ).all<TeamAccessRow>(userId);
+    )
+    .all<TeamAccessRow>(userId);
 }
 
 /** The client-facing shape of a vault, matching what Ravelon clients decode. */
@@ -261,18 +269,16 @@ export function publicVault(vault: VaultAccessRow) {
  * a team member never learns about a vault they were not added to.
  */
 export async function publicTeam(db: AppDatabase, team: TeamAccessRow, viewerUserId: string) {
-  const members = await scalar(
-    db,
-    'SELECT COUNT(*) AS count FROM team_members WHERE team_id = ?',
-    [team.id],
-  );
-  const vaults = await db.prepare(
-    `SELECT v.*, vm.role AS member_role
+  const members = await scalar(db, 'SELECT COUNT(*) AS count FROM team_members WHERE team_id = ?', [team.id]);
+  const vaults = await db
+    .prepare(
+      `SELECT v.*, vm.role AS member_role
      FROM vaults v
      JOIN vault_members vm ON vm.vault_id = v.id
      WHERE v.team_id = ? AND vm.user_id = ?
      ORDER BY v.created_at ASC`,
-  ).all<VaultAccessRow>(team.id, viewerUserId);
+    )
+    .all<VaultAccessRow>(team.id, viewerUserId);
   return {
     id: team.id,
     name: team.name,

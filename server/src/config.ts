@@ -77,10 +77,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const jwtSecret = requiredSecret(env.SYNC_JWT_SECRET, 'SYNC_JWT_SECRET', production);
   // Both fall back to the JWT secret so a minimal .env still starts. In
   // production every one of them is checked for real entropy first.
-  const mfaEncryptionKey = optionalSecret(env.MFA_ENCRYPTION_KEY, 'MFA_ENCRYPTION_KEY', production)
-    ?? jwtSecret;
-  const settingsEncryptionKey = optionalSecret(env.SETTINGS_ENCRYPTION_KEY, 'SETTINGS_ENCRYPTION_KEY', production)
-    ?? mfaEncryptionKey;
+  const mfaEncryptionKey =
+    optionalSecret(env.MFA_ENCRYPTION_KEY, 'MFA_ENCRYPTION_KEY', production) ?? jwtSecret;
+  const settingsEncryptionKey =
+    optionalSecret(env.SETTINGS_ENCRYPTION_KEY, 'SETTINGS_ENCRYPTION_KEY', production) ?? mfaEncryptionKey;
 
   const publicUrl = normalizeOrigin(env.PUBLIC_URL, 'PUBLIC_URL');
   // Reset, invitation and pairing links are built from this. Without a fixed
@@ -88,8 +88,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // reset request would mail the victim a link to the attacker's server.
   if (production && !publicUrl) {
     throw new ConfigError(
-      'PUBLIC_URL is required in production. Set it to the origin people reach this server at, '
-      + 'such as https://sync.example.com',
+      'PUBLIC_URL is required in production. Set it to the origin people reach this server at, ' +
+        'such as https://sync.example.com',
     );
   }
 
@@ -140,9 +140,7 @@ function requiredSecret(value: string | undefined, name: string, production: boo
   const secret = value?.trim() ?? '';
   if (!secret) {
     if (production) {
-      throw new ConfigError(
-        `${name} is required in production. Generate one with: openssl rand -base64 48`,
-      );
+      throw new ConfigError(`${name} is required in production. Generate one with: openssl rand -base64 48`);
     }
     return `${DEV_SECRET_PREFIX}${randomBytes(32).toString('base64url')}`;
   }
@@ -160,7 +158,9 @@ function optionalSecret(value: string | undefined, name: string, production: boo
 function assertStrongSecret(secret: string, name: string, production: boolean): void {
   if (!production) return;
   if (secret.length < 32) {
-    throw new ConfigError(`${name} must be at least 32 characters. Generate one with: openssl rand -base64 48`);
+    throw new ConfigError(
+      `${name} must be at least 32 characters. Generate one with: openssl rand -base64 48`,
+    );
   }
   if (new Set(secret).size < 8) {
     throw new ConfigError(`${name} looks like a placeholder. Generate one with: openssl rand -base64 48`);

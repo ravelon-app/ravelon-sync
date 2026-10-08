@@ -64,8 +64,16 @@ export function AdminInvites() {
         }
       />
 
-      {invites.error ? <Notice tone="danger" className="mb-4">{invites.error}</Notice> : null}
-      {error ? <Notice tone="danger" className="mb-4">{error}</Notice> : null}
+      {invites.error ? (
+        <Notice tone="danger" className="mb-4">
+          {invites.error}
+        </Notice>
+      ) : null}
+      {error ? (
+        <Notice tone="danger" className="mb-4">
+          {error}
+        </Notice>
+      ) : null}
 
       <Panel>
         {invites.loading ? (

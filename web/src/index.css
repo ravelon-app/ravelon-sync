@@ -44,7 +44,9 @@ body {
   background: var(--color-ink);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-feature-settings: "cv11" on, "ss01" on;
+  font-feature-settings:
+    "cv11" on,
+    "ss01" on;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -173,6 +175,7 @@ input[type="number"]::-webkit-inner-spin-button {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override every component transition */
     transition-duration: 0.01ms !important;
   }
 }

@@ -210,7 +210,8 @@ describe('two-factor authentication', () => {
       body: { code: currentCode(setup.body.secret) },
     });
 
-    const row = await fresh.db.prepare('SELECT totp_secret_encrypted FROM user_mfa WHERE user_id = ?')
+    const row = await fresh.db
+      .prepare('SELECT totp_secret_encrypted FROM user_mfa WHERE user_id = ?')
       .get<{ totp_secret_encrypted: string }>(account.userId);
     assert.ok(row);
     assert.notEqual(row.totp_secret_encrypted, setup.body.secret);
@@ -218,7 +219,8 @@ describe('two-factor authentication', () => {
     assert.match(row.totp_secret_encrypted, /^v1\./);
 
     // Recovery codes are keyed hashes, so a copy of this table is not a way in.
-    const codes = await fresh.db.prepare('SELECT code_hash FROM mfa_recovery_codes WHERE user_id = ?')
+    const codes = await fresh.db
+      .prepare('SELECT code_hash FROM mfa_recovery_codes WHERE user_id = ?')
       .all<{ code_hash: string }>(account.userId);
     assert.equal(codes.length, 10);
     for (const stored of codes) {

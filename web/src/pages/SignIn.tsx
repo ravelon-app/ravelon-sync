@@ -94,7 +94,10 @@ export function SignIn() {
         canSignUp ? (
           <>
             {t("auth.noAccount")}{" "}
-            <Link to={params.get("next") ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-teal underline-offset-2 hover:underline">
+            <Link
+              to={params.get("next") ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
+              className="font-medium text-teal underline-offset-2 hover:underline"
+            >
               {t("auth.signUp")}
             </Link>
           </>

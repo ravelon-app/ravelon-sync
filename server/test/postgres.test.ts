@@ -69,7 +69,9 @@ describe('PostgreSQL', { skip }, () => {
 
   test('migrations apply cleanly, once', async () => {
     assert.equal(db.dialect, 'postgres');
-    const applied = await db.prepare('SELECT name FROM schema_migrations ORDER BY name').all<{ name: string }>();
+    const applied = await db
+      .prepare('SELECT name FROM schema_migrations ORDER BY name')
+      .all<{ name: string }>();
     assert.deepEqual(
       applied.map((row) => row.name).sort(),
       MIGRATIONS.map((migration) => migration.name).sort(),
@@ -85,20 +87,24 @@ describe('PostgreSQL', { skip }, () => {
   });
 
   test('? placeholders are rewritten outside string literals only', async () => {
-    const row = await db.prepare(
-      "SELECT '?' AS literal, 'it''s ?' AS escaped, CAST(? AS TEXT) AS first, CAST(? AS TEXT) AS second",
-    ).get<{ literal: string; escaped: string; first: string; second: string }>('one', 'two');
+    const row = await db
+      .prepare(
+        "SELECT '?' AS literal, 'it''s ?' AS escaped, CAST(? AS TEXT) AS first, CAST(? AS TEXT) AS second",
+      )
+      .get<{ literal: string; escaped: string; first: string; second: string }>('one', 'two');
     assert.deepEqual(row, { literal: '?', escaped: "it's ?", first: 'one', second: 'two' });
   });
 
   test('BIGINT and COUNT(*) arrive as numbers', async () => {
-    const row = await db.prepare('SELECT CAST(? AS BIGINT) AS big, COUNT(*) AS count FROM schema_migrations')
+    const row = await db
+      .prepare('SELECT CAST(? AS BIGINT) AS big, COUNT(*) AS count FROM schema_migrations')
       .get<{ big: unknown; count: unknown }>(9_007_199_254_740_000);
     assert.equal(typeof row?.big, 'number');
     assert.equal(row?.big, 9_007_199_254_740_000);
     assert.equal(typeof row?.count, 'number');
 
-    const counter = await db.prepare("SELECT value FROM counters WHERE name = 'sync_cursor'")
+    const counter = await db
+      .prepare("SELECT value FROM counters WHERE name = 'sync_cursor'")
       .get<{ value: unknown }>();
     assert.equal(typeof counter?.value, 'number');
   });
@@ -121,10 +127,12 @@ describe('PostgreSQL', { skip }, () => {
 
     // A statement error inside the transaction is a rollback too, and the
     // pooled connection must come back usable.
-    await assert.rejects(db.transaction(async () => {
-      await db.prepare('INSERT INTO tx_probe (id) VALUES (?)').run(3);
-      await db.prepare('INSERT INTO tx_probe (id) VALUES (?)').run(3);
-    })());
+    await assert.rejects(
+      db.transaction(async () => {
+        await db.prepare('INSERT INTO tx_probe (id) VALUES (?)').run(3);
+        await db.prepare('INSERT INTO tx_probe (id) VALUES (?)').run(3);
+      })(),
+    );
     assert.equal(await scalar(db, 'SELECT COUNT(*) AS count FROM tx_probe'), 0);
 
     await db.transaction(async () => {
@@ -140,12 +148,16 @@ describe('PostgreSQL', { skip }, () => {
     // Each transaction reads, waits, and writes back what it read plus one.
     // Without the lock, several read the same value and increments are lost.
     const workers = 8;
-    await Promise.all(Array.from({ length: workers }, () => db.transaction(async () => {
-      await lockSection(db, 'vault_storage');
-      const row = await db.prepare('SELECT n FROM lock_probe WHERE id = 1').get<{ n: number }>();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      await db.prepare('UPDATE lock_probe SET n = ? WHERE id = 1').run(Number(row?.n) + 1);
-    })()));
+    await Promise.all(
+      Array.from({ length: workers }, () =>
+        db.transaction(async () => {
+          await lockSection(db, 'vault_storage');
+          const row = await db.prepare('SELECT n FROM lock_probe WHERE id = 1').get<{ n: number }>();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          await db.prepare('UPDATE lock_probe SET n = ? WHERE id = 1').run(Number(row?.n) + 1);
+        })(),
+      ),
+    );
 
     assert.equal(await scalar(db, 'SELECT n FROM lock_probe WHERE id = 1'), workers);
   });
@@ -196,7 +208,8 @@ describe('PostgreSQL', { skip }, () => {
       assert.equal((await push(vaultId, [syncItem('seed', vaultId)])).status, 200);
 
       const batches = Array.from({ length: 6 }, (_, batch) =>
-        Array.from({ length: 20 }, (_, index) => syncItem(`c-${batch}-${index}`, vaultId)));
+        Array.from({ length: 20 }, (_, index) => syncItem(`c-${batch}-${index}`, vaultId)),
+      );
       const responses = await Promise.all(batches.map((items) => push(vaultId, items)));
 
       const revisions = new Set<number>();
@@ -217,8 +230,9 @@ describe('PostgreSQL', { skip }, () => {
 
     test('concurrent first pushes to a new vault id all succeed, creating it once', async () => {
       const vaultId = 'pg-fresh-vault';
-      const responses = await Promise.all(Array.from({ length: 4 }, (_, index) =>
-        push(vaultId, [syncItem(`fresh-${index}`, vaultId)])));
+      const responses = await Promise.all(
+        Array.from({ length: 4 }, (_, index) => push(vaultId, [syncItem(`fresh-${index}`, vaultId)])),
+      );
       for (const response of responses) assert.equal(response.status, 200, JSON.stringify(response.body));
       assert.equal(await scalar(db, 'SELECT COUNT(*) AS count FROM vaults WHERE id = ?', [vaultId]), 1);
       assert.equal(
@@ -233,11 +247,13 @@ describe('PostgreSQL', { skip }, () => {
 
       const [first, second] = await Promise.all([
         push(vaultId, [syncItem('contested', vaultId, { baseRevision: 0, clientRevision: 1 })]),
-        push(vaultId, [syncItem('contested', vaultId, {
-          baseRevision: 0,
-          clientRevision: 1,
-          ciphertext: syncItem('contested-other', vaultId).ciphertext,
-        })]),
+        push(vaultId, [
+          syncItem('contested', vaultId, {
+            baseRevision: 0,
+            clientRevision: 1,
+            ciphertext: syncItem('contested-other', vaultId).ciphertext,
+          }),
+        ]),
       ]);
       assert.equal(first.status, 200);
       assert.equal(second.status, 200);

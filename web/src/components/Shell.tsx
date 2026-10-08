@@ -61,6 +61,7 @@ export function Shell() {
 
   // A route change on a phone should close the drawer, not leave it covering
   // the page the person just navigated to.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the pathname is the trigger, not a value read inside
   useEffect(() => {
     setNavOpen(false);
     setMenuOpen(false);
@@ -184,15 +185,7 @@ export function Shell() {
   );
 }
 
-function NavGroup({
-  items,
-  heading,
-  className,
-}: {
-  items: NavItem[];
-  heading?: string;
-  className?: string;
-}) {
+function NavGroup({ items, heading, className }: { items: NavItem[]; heading?: string; className?: string }) {
   const { t } = useI18n();
   return (
     <div className={className}>

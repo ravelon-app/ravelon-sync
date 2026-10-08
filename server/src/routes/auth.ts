@@ -76,15 +76,18 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     // invitation: the person was invited by someone allowed to invite, and the
     // address check below keeps a forwarded link from opening an account for
     // anybody else.
-    const teamInvite = body.teamInviteToken && !body.inviteToken
-      ? await findUsableTeamInvite(context, body.teamInviteToken)
-      : null;
+    const teamInvite =
+      body.teamInviteToken && !body.inviteToken
+        ? await findUsableTeamInvite(context, body.teamInviteToken)
+        : null;
     if (teamInvite && teamInvite.email.toLowerCase() !== body.email.toLowerCase()) {
-      throw new ApiError(403, 'invite_email_mismatch', 'This invitation was sent to a different email address');
+      throw new ApiError(
+        403,
+        'invite_email_mismatch',
+        'This invitation was sent to a different email address',
+      );
     }
-    const invite = teamInvite
-      ? null
-      : await checkRegistrationAllowed(context, body.email, body.inviteToken);
+    const invite = teamInvite ? null : await checkRegistrationAllowed(context, body.email, body.inviteToken);
     if (await getUserByEmail(db, body.email)) {
       throw new ApiError(409, 'account_exists', 'An account with this email already exists');
     }
@@ -105,22 +108,26 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       }
       // A deployment's first account is always its administrator, whatever an
       // invitation says. There is nobody else to grant that role.
-      const isFirstAccount = await scalar(db, 'SELECT COUNT(*) AS count FROM users') === 0;
+      const isFirstAccount = (await scalar(db, 'SELECT COUNT(*) AS count FROM users')) === 0;
       const role = isFirstAccount ? 'admin' : invite?.role === 'admin' ? 'admin' : 'user';
 
-      await db.prepare(
-        `INSERT INTO users
+      await db
+        .prepare(
+          `INSERT INTO users
           (id, email, password_hash, display_name, email_verified, role, disabled, created_at, updated_at)
          VALUES (?, ?, ?, ?, 0, ?, 0, ?, ?)`,
-      ).run(userId, body.email, passwordHash, body.displayName?.trim() || null, role, now, now);
+        )
+        .run(userId, body.email, passwordHash, body.displayName?.trim() || null, role, now, now);
 
       if (invite) {
         // Consumed in the same transaction, so two people racing one link
         // cannot both get an account out of it.
-        const consumed = await db.prepare(
-          `UPDATE account_invites SET used_at = ?, used_by_user_id = ?
+        const consumed = await db
+          .prepare(
+            `UPDATE account_invites SET used_at = ?, used_by_user_id = ?
            WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL`,
-        ).run(now, userId, invite.id);
+          )
+          .run(now, userId, invite.id);
         if (consumed.changes !== 1) {
           throw new ApiError(409, 'invite_already_used', 'This invitation has already been used');
         }
@@ -128,12 +135,19 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
       await ensurePersonalVault(db, userId);
       if (teamInvite) await joinTeamFromInvite(context, teamInvite, userId);
-      await audit(db, userId, 'auth.register', `user:${userId}`, {
-        role,
-        bootstrap: isFirstAccount,
-        inviteId: invite?.id ?? null,
-        teamInviteId: teamInvite?.id ?? null,
-      }, clientIp(request));
+      await audit(
+        db,
+        userId,
+        'auth.register',
+        `user:${userId}`,
+        {
+          role,
+          bootstrap: isFirstAccount,
+          inviteId: invite?.id ?? null,
+          teamInviteId: teamInvite?.id ?? null,
+        },
+        clientIp(request),
+      );
       if (teamInvite) {
         await audit(db, userId, 'team.invite_accept', `team:${teamInvite.team_id}`, null, clientIp(request));
       }
@@ -173,10 +187,17 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       limiter.recordFailure(failKey);
       // The attempted address is kept so an operator can spot credential
       // stuffing; the password never is.
-      await audit(db, user?.id ?? null, 'auth.login_failed', user ? `user:${user.id}` : null, {
-        email: body.email,
-        knownAccount: Boolean(user),
-      }, clientIp(request));
+      await audit(
+        db,
+        user?.id ?? null,
+        'auth.login_failed',
+        user ? `user:${user.id}` : null,
+        {
+          email: body.email,
+          knownAccount: Boolean(user),
+        },
+        clientIp(request),
+      );
       throw new ApiError(401, 'invalid_credentials', 'Invalid email or password');
     }
     if (user.disabled) {
@@ -206,22 +227,19 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     }
 
     await audit(db, user.id, 'auth.login', `user:${user.id}`, { mfa: false }, clientIp(request));
-    return await issueSession(
-      db,
-      config,
-      user.id,
-      body.deviceName ?? 'Ravelon Web',
-      body.platform ?? 'web',
-      { ip: clientIp(request) },
-    );
+    return await issueSession(db, config, user.id, body.deviceName ?? 'Ravelon Web', body.platform ?? 'web', {
+      ip: clientIp(request),
+    });
   });
 
   app.post('/v1/auth/mfa/verify', async (request) => {
     limiter.hit(`auth-mfa:${clientIp(request)}`, config.rateLimit.authPerIpPerMin);
-    const body = z.object({
-      challengeToken: z.string().min(24).max(200),
-      code: mfaCodeSchema,
-    }).parse(request.body);
+    const body = z
+      .object({
+        challengeToken: z.string().min(24).max(200),
+        code: mfaCodeSchema,
+      })
+      .parse(request.body);
 
     const challengeKey = `mfa-challenge:${sha256(body.challengeToken)}`;
     if (limiter.isLockedOut(challengeKey)) {
@@ -230,7 +248,8 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     // Read up front so a wrong code counts against the account as well as the
     // challenge. Counting per challenge alone would let an attacker who has
     // the password start a fresh challenge every few guesses and never stop.
-    const challengeOwner = await db.prepare('SELECT user_id FROM mfa_challenges WHERE challenge_hash = ?')
+    const challengeOwner = await db
+      .prepare('SELECT user_id FROM mfa_challenges WHERE challenge_hash = ?')
       .get<{ user_id: string }>(sha256(body.challengeToken));
     if (challengeOwner && limiter.isLockedOut(mfaUserFailKey(challengeOwner.user_id))) {
       throw new ApiError(429, 'too_many_attempts', 'Too many failed codes. Try again later');
@@ -244,9 +263,16 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
         limiter.recordFailure(challengeKey);
         if (challengeOwner) {
           limiter.recordFailure(mfaUserFailKey(challengeOwner.user_id));
-          await audit(db, challengeOwner.user_id, 'auth.mfa_failed', `user:${challengeOwner.user_id}`, {
-            stage: 'sign_in',
-          }, clientIp(request));
+          await audit(
+            db,
+            challengeOwner.user_id,
+            'auth.mfa_failed',
+            `user:${challengeOwner.user_id}`,
+            {
+              stage: 'sign_in',
+            },
+            clientIp(request),
+          );
         }
       }
       throw error;
@@ -254,10 +280,17 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     limiter.clearFailures(challengeKey);
     limiter.clearFailures(mfaUserFailKey(completed.challenge.user_id));
 
-    await audit(db, completed.challenge.user_id, 'auth.login', `user:${completed.challenge.user_id}`, {
-      mfa: true,
-      factor: completed.factor,
-    }, clientIp(request));
+    await audit(
+      db,
+      completed.challenge.user_id,
+      'auth.login',
+      `user:${completed.challenge.user_id}`,
+      {
+        mfa: true,
+        factor: completed.factor,
+      },
+      clientIp(request),
+    );
 
     return await issueSession(
       db,
@@ -275,8 +308,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
   });
 
   app.post('/v1/auth/logout', async (request, reply) => {
-    const body = z.object({ refreshToken: z.string().min(20).max(400).optional() })
-      .parse(request.body ?? {});
+    const body = z.object({ refreshToken: z.string().min(20).max(400).optional() }).parse(request.body ?? {});
     if (body.refreshToken) await revokeSessionByRefreshToken(db, body.refreshToken);
     return reply.code(204).send();
   });
@@ -284,23 +316,32 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
   app.post('/v1/auth/password/change', async (request, reply) => {
     const auth = await requireAuth(db, config, request);
     limiter.hit(`password-change:${auth.user.id}`, 10);
-    const body = z.object({
-      currentPassword: z.string().min(1).max(512),
-      newPassword: passwordSchema,
-      mfaCode: mfaCodeSchema.optional(),
-    }).parse(request.body);
+    const body = z
+      .object({
+        currentPassword: z.string().min(1).max(512),
+        newPassword: passwordSchema,
+        mfaCode: mfaCodeSchema.optional(),
+      })
+      .parse(request.body);
 
     // Shares the reauthentication lockout, so a stolen session cannot guess
     // the current password here without limit. A second factor is checked
     // when sent but not yet required: the desktop and iOS clients call this
     // without one, and requiring it would lock them out of changing a
     // password at all.
-    await verifyReauth(context, auth.user.id, auth.user.password_hash, {
-      password: body.currentPassword,
-      mfaCode: body.mfaCode,
-    }, { wrongPasswordStatus: 400, ip: clientIp(request) });
+    await verifyReauth(
+      context,
+      auth.user.id,
+      auth.user.password_hash,
+      {
+        password: body.currentPassword,
+        mfaCode: body.mfaCode,
+      },
+      { wrongPasswordStatus: 400, ip: clientIp(request) },
+    );
 
-    await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+    await db
+      .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(await hashPassword(body.newPassword), nowIso(), auth.user.id);
     // A reset link requested before the change must not be able to undo it.
     await invalidatePasswordResetTokens(db, auth.user.id);
@@ -319,10 +360,12 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     if (user && !user.disabled) {
       const token = randomToken('prt');
       const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString();
-      await db.prepare(
-        `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+      await db
+        .prepare(
+          `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
          VALUES (?, ?, ?, ?, NULL, ?)`,
-      ).run(newId(), user.id, sha256(token), expiresAt, nowIso());
+        )
+        .run(newId(), user.id, sha256(token), expiresAt, nowIso());
 
       const platform = await readSetting(db, 'platform');
       const resetUrl = `${publicOrigin(config, request)}/reset-password?token=${encodeURIComponent(token)}`;
@@ -331,22 +374,36 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
       // waiting for it would make the response time reveal which addresses
       // exist here.
       void (async () => {
-        const delivery = await sendMail(db, config, passwordResetEmail({
-          serverName: platform.serverName,
-          to: user.email,
-          resetUrl,
-          expiresAt,
-        }));
-        await audit(db, user.id, 'auth.password_reset_request', `user:${user.id}`, {
-          delivered: delivery.sent,
-        }, ip);
+        const delivery = await sendMail(
+          db,
+          config,
+          passwordResetEmail({
+            serverName: platform.serverName,
+            to: user.email,
+            resetUrl,
+            expiresAt,
+          }),
+        );
+        await audit(
+          db,
+          user.id,
+          'auth.password_reset_request',
+          `user:${user.id}`,
+          {
+            delivered: delivery.sent,
+          },
+          ip,
+        );
       })().catch((error: unknown) => {
         // Only the error class and code: the message could quote the mail,
         // and the mail carries the reset token.
-        request.log.warn({
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorCode: (error as { code?: unknown } | null)?.code ?? null,
-        }, 'password reset mail failed');
+        request.log.warn(
+          {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorCode: (error as { code?: unknown } | null)?.code ?? null,
+          },
+          'password reset mail failed',
+        );
       });
     }
 
@@ -357,25 +414,29 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
   app.post('/v1/auth/password/reset/confirm', async (request, reply) => {
     limiter.hit(`reset-confirm:${clientIp(request)}`, config.rateLimit.authPerIpPerMin);
-    const body = z.object({
-      token: z.string().min(20).max(400),
-      newPassword: passwordSchema,
-    }).parse(request.body);
+    const body = z
+      .object({
+        token: z.string().min(20).max(400),
+        newPassword: passwordSchema,
+      })
+      .parse(request.body);
 
     const tokenHash = sha256(body.token);
     const userId = await db.transaction(async () => {
-      const row = await db.prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ?')
+      const row = await db
+        .prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ?')
         .get<{ id: string; user_id: string; expires_at: string; used_at: string | null }>(tokenHash);
       if (!row || row.used_at || Date.parse(row.expires_at) <= Date.now()) {
         throw new ApiError(400, 'invalid_reset_token', 'This reset link is invalid or expired');
       }
-      const claimed = await db.prepare(
-        'UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL',
-      ).run(nowIso(), row.id);
+      const claimed = await db
+        .prepare('UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL')
+        .run(nowIso(), row.id);
       if (claimed.changes !== 1) {
         throw new ApiError(400, 'invalid_reset_token', 'This reset link is invalid or expired');
       }
-      await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+      await db
+        .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
         .run(await hashPassword(body.newPassword), nowIso(), row.user_id);
       // Any other link sent before this reset is spent too, so an older mail
       // found later cannot set the password again.
@@ -400,8 +461,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
     const body = z.object({ token: z.string().min(20).max(400) }).parse(request.body);
     const tokenHash = sha256(body.token);
     const userId = await db.transaction(async () => {
-      const row = await db.prepare('SELECT * FROM email_verifications WHERE token_hash = ?')
-        .get<{ id: string; user_id: string; email: string; expires_at: string; used_at: string | null }>(tokenHash);
+      const row = await db
+        .prepare('SELECT * FROM email_verifications WHERE token_hash = ?')
+        .get<{ id: string; user_id: string; email: string; expires_at: string; used_at: string | null }>(
+          tokenHash,
+        );
       if (!row || row.used_at || Date.parse(row.expires_at) <= Date.now()) {
         throw new ApiError(400, 'invalid_verification_token', 'This confirmation link is invalid or expired');
       }
@@ -412,7 +476,8 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
         throw new ApiError(400, 'invalid_verification_token', 'This confirmation link is invalid or expired');
       }
       await db.prepare('UPDATE email_verifications SET used_at = ? WHERE id = ?').run(nowIso(), row.id);
-      await db.prepare('UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?')
+      await db
+        .prepare('UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?')
         .run(nowIso(), row.user_id);
       return row.user_id;
     })();
@@ -423,7 +488,8 @@ export function registerAuthRoutes(app: FastifyInstance, context: RouteContext):
 
 /** Marks every unused reset link for an account as spent. */
 export async function invalidatePasswordResetTokens(db: AppDatabase, userId: string): Promise<void> {
-  await db.prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL')
+  await db
+    .prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL')
     .run(nowIso(), userId);
 }
 
@@ -444,19 +510,25 @@ export async function requestEmailVerification(
   const { db, config } = context;
   const token = randomToken('evt');
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS).toISOString();
-  await db.prepare(
-    `INSERT INTO email_verifications (id, user_id, token_hash, email, expires_at, used_at, created_at)
+  await db
+    .prepare(
+      `INSERT INTO email_verifications (id, user_id, token_hash, email, expires_at, used_at, created_at)
      VALUES (?, ?, ?, ?, ?, NULL, ?)`,
-  ).run(newId(), userId, sha256(token), email, expiresAt, nowIso());
+    )
+    .run(newId(), userId, sha256(token), email, expiresAt, nowIso());
 
   const platform = await readSetting(db, 'platform');
   const verifyUrl = `${publicOrigin(config, request)}/verify-email?token=${encodeURIComponent(token)}`;
-  return await sendMail(db, config, emailVerificationEmail({
-    serverName: platform.serverName,
-    to: email,
-    verifyUrl,
-    expiresAt,
-  }));
+  return await sendMail(
+    db,
+    config,
+    emailVerificationEmail({
+      serverName: platform.serverName,
+      to: email,
+      verifyUrl,
+      expiresAt,
+    }),
+  );
 }
 
 /**
@@ -475,7 +547,7 @@ export async function checkRegistrationAllowed(
 
   // A deployment with no accounts must let the first one in, or there would be
   // nobody able to configure the rest.
-  if (await scalar(db, 'SELECT COUNT(*) AS count FROM users') === 0) return null;
+  if ((await scalar(db, 'SELECT COUNT(*) AS count FROM users')) === 0) return null;
 
   if (inviteToken) {
     const invite = await findUsableInvite(context, inviteToken);
@@ -504,18 +576,11 @@ export async function checkRegistrationAllowed(
   return null;
 }
 
-export async function findUsableInvite(
-  context: RouteContext,
-  token: string,
-): Promise<AccountInviteRow> {
-  const invite = await context.db.prepare('SELECT * FROM account_invites WHERE token_hash = ?')
+export async function findUsableInvite(context: RouteContext, token: string): Promise<AccountInviteRow> {
+  const invite = await context.db
+    .prepare('SELECT * FROM account_invites WHERE token_hash = ?')
     .get<AccountInviteRow>(sha256(token));
-  if (
-    !invite
-    || invite.used_at
-    || invite.revoked_at
-    || Date.parse(invite.expires_at) <= Date.now()
-  ) {
+  if (!invite || invite.used_at || invite.revoked_at || Date.parse(invite.expires_at) <= Date.now()) {
     throw new ApiError(403, 'invite_invalid', 'This invitation is invalid, used or expired');
   }
   return invite;
