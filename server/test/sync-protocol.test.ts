@@ -506,5 +506,13 @@ describe('hosted-only client features', () => {
     // Uploads stay unanswered: nothing here would ever store them.
     const upload = await api(server, 'POST', '/v1/telemetry/ios', { body: { installId: 'install-1' } });
     assert.equal(upload.status, 404);
+    // Android asks the same questions and gets the same answers.
+    const android = await api(server, 'GET', '/v1/telemetry/android/config');
+    assert.equal(android.status, 200);
+    assert.equal(android.body.enabled, false);
+    const androidForget = await api(server, 'POST', '/v1/telemetry/android/forget', {
+      body: { installId: 'install-1' },
+    });
+    assert.equal(androidForget.status, 200);
   });
 });
