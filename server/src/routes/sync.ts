@@ -300,6 +300,11 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
    * the fact that something changed.
    */
   app.get('/v1/sync/events', { websocket: true }, (socket, request) => {
+    // Preserve the sync endpoint's pre-relay incoming limit. It never parses client messages.
+    socket.on('message', (data) => {
+      const bytes = Array.isArray(data) ? data.reduce((sum, part) => sum + part.length, 0) : data.byteLength;
+      if (bytes > 64 * 1024) socket.close(1009, 'frame_too_large');
+    });
     void (async () => {
       const auth = await requireAuth(db, config, request);
       await assertCanSync(context, Boolean(auth.user.email_verified));

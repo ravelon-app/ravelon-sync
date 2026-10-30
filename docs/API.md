@@ -366,3 +366,8 @@ Every route needs `role=admin` and answers `403 admin_required` otherwise.
 | `413` | Too large, or the vault quota is reached |
 | `429` | Rate limited |
 | `503` | Maintenance mode, writes only |
+
+## Live agent relay
+
+The separate authenticated, opaque live relay is described in [AGENT_RELAY.md](AGENT_RELAY.md).
+Ordinary vault sync and change hints retain their existing contract.

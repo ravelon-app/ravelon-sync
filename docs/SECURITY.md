@@ -200,3 +200,8 @@ Out of scope: missing headers with no demonstrated impact, rate limits on
 unauthenticated endpoints that are already limited, attacks requiring a
 compromised client or a leaked account password, and anything requiring physical
 access to an unlocked device.
+
+## Live agent relay
+
+The separate authenticated, opaque live relay is described in [AGENT_RELAY.md](AGENT_RELAY.md).
+Ordinary vault sync and change hints retain their existing contract.

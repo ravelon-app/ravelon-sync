@@ -108,3 +108,9 @@ says: there is nobody else who could permit it.
 
 `closed` removes the public form, not administrator invitations. That is what
 makes it usable as "I create every account by hand".
+
+## Agent relay
+
+`AGENT_RELAY_HOST_LIMIT` sets the number of registered live-agent hosts per account
+(default 3, clamped to 1 through 100). Self-hosted relay needs no licence. See
+[AGENT_RELAY.md](AGENT_RELAY.md) for transport limits and deployment requirements.

@@ -47,6 +47,7 @@ export interface Config {
     password?: string;
     from: string;
   };
+  agentRelay: { hostLimit: number };
   limits: {
     /** Encrypted bytes one vault may hold. */
     vaultStorageBytes: number;
@@ -117,6 +118,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       password: env.SMTP_PASSWORD || undefined,
       from: env.EMAIL_FROM?.trim() || 'Ravelon Sync <no-reply@localhost>',
     },
+    agentRelay: { hostLimit: Math.min(100, Math.max(1, integer(env.AGENT_RELAY_HOST_LIMIT, 3))) },
     limits: {
       vaultStorageBytes: integer(env.VAULT_STORAGE_LIMIT_MB, 256) * 1024 * 1024,
       vaultsPerUser: integer(env.VAULTS_PER_USER, 50),

@@ -314,4 +314,19 @@ FROM vault_key_material AS material
 JOIN vaults ON vaults.id = material.vault_id;
 `,
   },
+  {
+    name: '003_agent_relay_hosts',
+    sql: `
+CREATE TABLE agent_relay_hosts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (user_id, client_id)
+);
+CREATE INDEX idx_agent_relay_hosts_user ON agent_relay_hosts(user_id);
+`,
+  },
 ];
