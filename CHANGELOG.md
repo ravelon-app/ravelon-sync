@@ -12,6 +12,12 @@ Notable changes, newest first. This project follows
   parsing that could exhaust the stack, and host normalisation.
 - source-map-js 1.2.2 in the web build. The previous version could be held
   up indefinitely by a crafted source map with indexed section offsets.
+- Nodemailer 10.2.1, Fastify 5.12.7, Zod 4.6.7 and a patched fast-uri. The
+  previous versions had advisories for recipients injected through address
+  parsing, a header validation bypass, memory exhaustion on oversized
+  collections, and URI scheme and host confusion.
+- Vite 8.3.5 and Vitest 4.1.12 in the web build and tests. The previous
+  versions could expose files and run code through the development server.
 
 ### New
 

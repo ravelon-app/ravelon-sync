@@ -46,6 +46,14 @@ only when it can).
 
 Liveness for Docker and Kubernetes. Touches the database.
 
+## Client usage counts
+
+This self-hosted server collects no usage counts. Desktop, iOS and Android
+clients can call `GET /v1/telemetry/:platform/config` to receive
+`{"enabled":false}` and `POST /v1/telemetry/:platform/forget` with an `installId`
+to receive `{"forgotten":true}`. The accepted platform names are `desktop`,
+`ios` and `android`. Upload routes remain unavailable and return 404.
+
 ## Authentication
 
 ### `POST /v1/auth/register`

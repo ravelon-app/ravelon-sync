@@ -116,3 +116,22 @@ impact, list the commands run, and call out migrations, new environment
 variables and security consequences explicitly.
 
 Never edit a migration that has shipped. Append a new one.
+
+## Problems you find
+
+Fix every problem you come across while working, right away. That covers
+errors; compiler, linter and console warnings; failing or flaky tests; checks
+that are skipped or never run; documentation that contradicts the code; and
+anything else that is wrong. It does not matter whether your change caused it
+or it was already on `main`.
+
+- Small and related to your change: fix it in the same change. Otherwise open
+  its own branch and pull request right away. A note for later is not a fix.
+- Fix the cause instead of silencing the finding with an ignore comment, a
+  skipped test or a loosened check. Never leave a known problem only in a
+  summary or a list of follow-ups.
+- If you see that an approach will not hold, because it is slow, fragile, hard
+  to maintain or will not scale, say so, explain why, and propose or build the
+  better way instead of patching around it.
+- The rest of this file still applies: the security rules, merging only when
+  asked and no release actions without a request.
