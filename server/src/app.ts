@@ -14,6 +14,7 @@ import { ApiError } from './lib/errors.js';
 import { RateLimiter } from './lib/rate-limit.js';
 import { SyncEventHub } from './lib/sync-events.js';
 import { SYNC_BODY_LIMIT_BYTES } from './routes/sync.js';
+import { registerAgentRelayRoutes } from './routes/agent-relay.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerClientRoutes } from './routes/clients.js';
@@ -109,7 +110,11 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
   };
 
   await app.register(websocket, {
-    options: { maxPayload: 64 * 1024 },
+    errorHandler(error, socket) {
+      const oversized = 'code' in error && error.code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH';
+      socket.close(oversized ? 1009 : 1008, oversized ? 'frame_too_large' : 'invalid_frame');
+    },
+    options: { maxPayload: 1024 * 1024, perMessageDeflate: false },
   });
 
   // The bundled web interface is same-origin, so it needs no entry here. CORS
@@ -191,6 +196,7 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
     });
   });
 
+  registerAgentRelayRoutes(app, context);
   registerHealthRoutes(app, context);
   registerAuthRoutes(app, context);
   registerAccountRoutes(app, context);
