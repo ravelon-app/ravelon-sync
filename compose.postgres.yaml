@@ -1,11 +1,3 @@
-# Ravelon Sync backed by PostgreSQL.
-#
-#   docker compose -f compose.postgres.yaml up -d
-#
-# Use this when you want replicas, or you already run PostgreSQL and would
-# rather back it up with everything else. SQLite (compose.yaml) is the simpler
-# choice for a single instance and handles a small team without complaint.
-
 name: ravelon-sync
 
 services:
@@ -23,13 +15,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    networks:
-      - backend
 
   sync:
     image: ghcr.io/ravelon-app/ravelon-sync:latest
-    build:
-      context: .
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -40,24 +28,15 @@ services:
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?Set SETTINGS_ENCRYPTION_KEY in .env}
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
-      # The password travels separately in PGPASSWORD, which the PostgreSQL
-      # client reads when the URL carries none. Interpolated into the URL, a
-      # password containing @, :, / or # would break the connection string.
       DATABASE_URL: postgresql://${POSTGRES_USER:-ravelon}@postgres:5432/${POSTGRES_DB:-ravelon_sync}
       PGPASSWORD: ${POSTGRES_PASSWORD}
-
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-Ravelon Sync <sync@localhost>}
-
-      # Every other setting .env.example documents. Compose only hands a
-      # container what is listed here, so a value missing from this block
-      # would be silently ignored.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
-      # Unset keeps the bundled interface; an empty value means API only.
       WEB_ROOT: ${WEB_ROOT-/app/server/public}
       VAULT_STORAGE_LIMIT_MB: ${VAULT_STORAGE_LIMIT_MB:-256}
       VAULTS_PER_USER: ${VAULTS_PER_USER:-50}
@@ -86,11 +65,6 @@ services:
       start_period: 15s
     security_opt:
       - no-new-privileges:true
-    networks:
-      - backend
 
 volumes:
   postgres_data:
-
-networks:
-  backend:

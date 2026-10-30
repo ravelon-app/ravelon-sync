@@ -8,6 +8,7 @@
       "server/*.json",
       "server/src/**",
       "server/test/**",
+      "scripts/*.mjs",
       "web/*.json",
       "web/*.ts",
       "web/src/**",

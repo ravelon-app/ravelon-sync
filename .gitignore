@@ -8,3 +8,4 @@ data/
 .DS_Store
 coverage/
 server/public/
+postgres_data/

@@ -35,7 +35,7 @@ export function registerClientRoutes(app: FastifyInstance, context: RouteContext
 
   /** This server collects no usage counters from any client. */
   app.get('/v1/telemetry/:platform/config', async (request) => {
-    z.object({ platform: z.enum(['ios', 'desktop']) }).parse(request.params);
+    z.object({ platform: z.enum(['ios', 'desktop', 'android']) }).parse(request.params);
     return { enabled: false };
   });
 
@@ -45,7 +45,7 @@ export function registerClientRoutes(app: FastifyInstance, context: RouteContext
    * server confirms, and without this they would ask forever.
    */
   app.post('/v1/telemetry/:platform/forget', async (request) => {
-    z.object({ platform: z.enum(['ios', 'desktop']) }).parse(request.params);
+    z.object({ platform: z.enum(['ios', 'desktop', 'android']) }).parse(request.params);
     z.object({ installId: z.string().min(1).max(200) }).parse(request.body);
     return { forgotten: true };
   });
