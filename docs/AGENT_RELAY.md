@@ -48,6 +48,8 @@ The body must be a JSON object. Sender/device IDs are never accepted from client
 Unknown fields, invalid roles/IDs, binary and malformed frames close the connection.
 The service does not inspect the encrypted packet or the initial grant join body.
 Hosts cannot address controllers of another host.
+Replies to controller routes that have already closed are discarded without
+disconnecting the host or its other controllers.
 
 Both endpoints' account, token, device, host and relay permissions are checked
 before every forwarded frame and every 25 seconds while idle. Database errors

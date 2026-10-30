@@ -144,6 +144,8 @@ export class AgentRelayHub {
           peer.role === 'host'
             ? this.#controllers.get((frame as z.infer<typeof hostFrame>).routeId)
             : this.#hosts.get(peer.hostId);
+        // A controller can disconnect while its host reply is still in flight.
+        if (!target && peer.role === 'host') return;
         if (!target || target.hostId !== peer.hostId || target.identity.userId !== peer.identity.userId) {
           this.#drop(peer, 1008, 'route_not_accessible');
           return;

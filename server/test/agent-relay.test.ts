@@ -129,6 +129,33 @@ test('relay routes opaque bodies only to the host and the server-selected contro
   assert.deepEqual(h.messages[2], { type: 'controllerLeft', routeId });
 });
 
+test('late replies to closed controller routes leave the host and other controllers connected', async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const id = await host(f);
+  const h = await connect(f, id, 'host', f.owner.token);
+  const leaving = await connect(f, id, 'controller', f.controller.token);
+  const remaining = await connect(f, id, 'controller', f.controller.token);
+  await waitFor(() => leaving.messages.length === 1 && remaining.messages.length === 1);
+  const retiredRoute = leaving.messages[0].routeId;
+  const liveRoute = remaining.messages[0].routeId;
+  leaving.socket.close();
+  await leaving.closed;
+  await waitFor(() =>
+    h.messages.some((message) => message.type === 'controllerLeft' && message.routeId === retiredRoute),
+  );
+  h.socket.send(JSON.stringify({ type: 'frame', routeId: retiredRoute, body: { ciphertext: 'late reply' } }));
+  h.socket.send(
+    JSON.stringify({ type: 'frame', routeId: randomUUID(), body: { ciphertext: 'missing route' } }),
+  );
+  h.socket.send(JSON.stringify({ type: 'frame', routeId: liveRoute, body: { ciphertext: 'current reply' } }));
+  await waitFor(() => remaining.messages.length === 2 || h.socket.readyState === WebSocket.CLOSED);
+  assert.equal(h.socket.readyState, WebSocket.OPEN);
+  assert.equal(remaining.socket.readyState, WebSocket.OPEN);
+  assert.deepEqual(remaining.messages[1], { type: 'frame', body: { ciphertext: 'current reply' } });
+  assert.equal((await f.call('GET', '/v1/agents/hosts', f.owner.token)).body.hosts[0].online, true);
+});
+
 test('relay denies cross-account, owner-role and hostile browser handshakes', async (t) => {
   const f = await fixture();
   t.after(() => f.close());
