@@ -27,16 +27,21 @@ anybody's vault.
 ```bash
 git clone https://github.com/ravelon-app/ravelon-sync.git
 cd ravelon-sync
-cp .env.example .env
-./scripts/generate-secrets.sh
+./scripts/generate-env.sh
 ```
 
-Paste the three generated secrets into `.env`, set `PUBLIC_URL` to the address
-you will reach the server at, then:
+It asks for the address you will reach the server at, generates the secrets
+and writes `.env`. Run the start command it prints for the selected database.
+For SQLite:
 
 ```bash
 docker compose up -d
 ```
+
+The generator needs Bash 5. On macOS, install it with `brew install bash`.
+
+The bundled PostgreSQL setup keeps its data in the existing `postgres_data`
+named volume across upgrades.
 
 Open the server in a browser. The first account you create becomes the
 administrator, and sign-up closes behind it until you decide who else may join.

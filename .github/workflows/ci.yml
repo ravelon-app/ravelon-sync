@@ -43,6 +43,19 @@ jobs:
       - name: Lint and format
         run: npx biome ci .
 
+      - name: Check environment setup and Compose configuration
+        if: matrix.node == '24'
+        env:
+          PUBLIC_URL: https://sync.example.test
+          DATABASE: postgres
+          ENV_OUTPUT: /tmp/ravelon-sync-ci.env
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+          shellcheck scripts/generate-env.sh
+          bash scripts/generate-env.sh --yes
+          node scripts/check-compose.mjs "$ENV_OUTPUT"
+
       - name: Audit high severity
         run: npm audit --audit-level=high
 
