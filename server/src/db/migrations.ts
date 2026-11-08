@@ -329,4 +329,23 @@ CREATE TABLE agent_relay_hosts (
 CREATE INDEX idx_agent_relay_hosts_user ON agent_relay_hosts(user_id);
 `,
   },
+  {
+    // Sealed pages the desktop shares by link. \`sealed\` is AES-GCM output
+    // under a key the server never receives (it travels in the link's
+    // fragment), so the server can serve and expire a page but not read it.
+    name: '004_public_links',
+    sql: `
+CREATE TABLE public_links (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  public_id TEXT NOT NULL UNIQUE,
+  sealed TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX idx_public_links_user ON public_links(user_id, expires_at);
+CREATE INDEX idx_public_links_expiry ON public_links(expires_at);
+`,
+  },
 ];

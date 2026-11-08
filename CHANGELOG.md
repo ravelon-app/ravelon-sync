@@ -21,6 +21,12 @@ Notable changes, newest first. This project follows
 
 ### New
 
+- Public links: the Ravelon desktop app can share an artifact or agent
+  thread as a page anyone with the link can open for 1, 7 or 30 days, and
+  revoke it at any time. The page is sealed on the desktop under a key that
+  only the link holds, so the server stores it without being able to read
+  it. Migration `004_public_links` adds the table.
+
 - `scripts/generate-env.sh` asks for the public URL, database and mail,
   generates the secrets and writes `.env`. Run again with `--force` to change
   it; existing values are kept.

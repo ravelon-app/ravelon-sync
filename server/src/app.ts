@@ -15,6 +15,7 @@ import { RateLimiter } from './lib/rate-limit.js';
 import { SyncEventHub } from './lib/sync-events.js';
 import { SYNC_BODY_LIMIT_BYTES } from './routes/sync.js';
 import { registerAgentRelayRoutes } from './routes/agent-relay.js';
+import { PUBLIC_LINK_POLICY, registerPublicLinkRoutes } from './routes/public-links.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerClientRoutes } from './routes/clients.js';
@@ -154,6 +155,9 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
       reply.header('Cache-Control', 'no-store');
     }
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) reply.header(name, value);
+    // A shared page gets a policy of its own: no request but its sealed
+    // bytes, and its sandboxed frame inherits the same.
+    if (path.startsWith('/p/')) reply.header('Content-Security-Policy', PUBLIC_LINK_POLICY);
     // HSTS only over HTTPS: sent over plain HTTP it is ignored at best, and a
     // development server on http://localhost must not be pinned to HTTPS.
     // request.protocol only reflects X-Forwarded-Proto from a trusted proxy.
@@ -206,6 +210,7 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
   registerDesktopRoutes(app, context);
   registerAdminRoutes(app, context);
   registerClientRoutes(app, context);
+  registerPublicLinkRoutes(app, context);
 
   await registerWebInterface(app, config);
 

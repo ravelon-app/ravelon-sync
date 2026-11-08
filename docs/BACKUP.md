@@ -4,7 +4,8 @@
 
 Two things, together:
 
-1. **The database** — accounts, teams, memberships, and every encrypted record
+1. **The database** — accounts, teams, memberships, every encrypted record,
+   and the sealed pages of public links that have not expired
 2. **The three secrets** from `.env`
 
 A database without `MFA_ENCRYPTION_KEY` leaves everyone with two-factor unable
