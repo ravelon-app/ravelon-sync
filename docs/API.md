@@ -367,6 +367,11 @@ Every route needs `role=admin` and answers `403 admin_required` otherwise.
 | `429` | Rate limited |
 | `503` | Maintenance mode, writes only |
 
+## Chat requests
+
+Slack and Discord requests for the desktop are described in
+[CHAT_REQUESTS.md](CHAT_REQUESTS.md).
+
 ## Live agent relay
 
 The separate authenticated, opaque live relay is described in [AGENT_RELAY.md](AGENT_RELAY.md).

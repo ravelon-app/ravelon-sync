@@ -329,4 +329,56 @@ CREATE TABLE agent_relay_hosts (
 CREATE INDEX idx_agent_relay_hosts_user ON agent_relay_hosts(user_id);
 `,
   },
+  {
+    // Chat requests from Slack and Discord. A link ties one chat identity to
+    // an account (proved by a one-time code from the desktop); allow rows say
+    // which channels and people of that workspace may reach the account;
+    // requests wait for the desktop for a week and are never run here.
+    name: '005_chat_requests',
+    sql: `
+CREATE TABLE chat_link_codes (
+  code_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE TABLE chat_links (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  workspace_label TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  member_label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (platform, workspace_id, member_id)
+);
+CREATE INDEX idx_chat_links_user ON chat_links(user_id);
+CREATE TABLE chat_allowed (
+  id TEXT PRIMARY KEY,
+  link_id TEXT NOT NULL REFERENCES chat_links(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (link_id, kind, value)
+);
+CREATE TABLE chat_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  link_id TEXT NOT NULL REFERENCES chat_links(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL,
+  channel_label TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  member_label TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  taken_at TEXT,
+  replies INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_chat_requests_user ON chat_requests(user_id, taken_at);
+CREATE INDEX idx_chat_requests_expiry ON chat_requests(expires_at);
+`,
+  },
 ];

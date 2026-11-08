@@ -2,6 +2,7 @@ import { buildServer } from './app.js';
 import { type Config, ConfigError, loadConfig, secretIsGenerated } from './config.js';
 import { pruneAuditLog } from './lib/audit.js';
 import { readSetting } from './lib/settings.js';
+import { deleteExpiredChatRequests } from './routes/chat-requests.js';
 
 async function main(): Promise<void> {
   let config: Config;
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
       await db.prepare('DELETE FROM email_verifications WHERE expires_at < ?').run(now);
       await db.prepare('DELETE FROM mfa_challenges WHERE expires_at < ?').run(now);
       await db.prepare('DELETE FROM desktop_auth_requests WHERE expires_at < ?').run(now);
+      await deleteExpiredChatRequests(db, now);
     } catch (error) {
       app.log.warn({ err: error }, 'scheduled cleanup failed');
     }

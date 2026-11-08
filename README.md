@@ -134,6 +134,7 @@ previous password once. Changing the password in the Ravelon app avoids this.
 - [Configuration reference](docs/CONFIGURATION.md)
 - [Security model](docs/SECURITY.md)
 - [API reference](docs/API.md)
+- [Chat requests from Slack and Discord](docs/CHAT_REQUESTS.md)
 - [Backup and restore](docs/BACKUP.md)
 - [Contributing](CONTRIBUTING.md)
 

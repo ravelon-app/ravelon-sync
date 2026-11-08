@@ -48,6 +48,15 @@ export interface Config {
     from: string;
   };
   agentRelay: { hostLimit: number };
+  /**
+   * Slack and Discord apps for chat requests (`routes/chat-requests.ts`).
+   * A platform is offered only with both of its values. They stay on the
+   * server: no route returns them and no log line names them.
+   */
+  chat: {
+    slack?: { signingSecret: string; botToken: string };
+    discord?: { publicKey: string; botToken: string };
+  };
   limits: {
     /** Encrypted bytes one vault may hold. */
     vaultStorageBytes: number;
@@ -68,6 +77,24 @@ export interface Config {
 }
 
 export class ConfigError extends Error {}
+
+/** A chat platform only with all of its values; a Discord public key must be 32 bytes of hex. */
+function chatConfig(env: NodeJS.ProcessEnv): Config['chat'] {
+  const value = (name: string) => env[name]?.trim() || undefined;
+  const slackSecret = value('SLACK_SIGNING_SECRET');
+  const slackToken = value('SLACK_BOT_TOKEN');
+  const discordKey = value('DISCORD_PUBLIC_KEY');
+  const discordToken = value('DISCORD_BOT_TOKEN');
+  if (discordKey && !/^[0-9a-fA-F]{64}$/.test(discordKey)) {
+    throw new ConfigError('DISCORD_PUBLIC_KEY must be the 64 hex characters of the application public key');
+  }
+  return {
+    ...(slackSecret && slackToken ? { slack: { signingSecret: slackSecret, botToken: slackToken } } : {}),
+    ...(discordKey && discordToken
+      ? { discord: { publicKey: discordKey.toLowerCase(), botToken: discordToken } }
+      : {}),
+  };
+}
 
 const DEV_SECRET_PREFIX = 'dev-insecure-';
 
@@ -119,6 +146,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       from: env.EMAIL_FROM?.trim() || 'Ravelon Sync <no-reply@localhost>',
     },
     agentRelay: { hostLimit: Math.min(100, Math.max(1, integer(env.AGENT_RELAY_HOST_LIMIT, 3))) },
+    chat: chatConfig(env),
     limits: {
       vaultStorageBytes: integer(env.VAULT_STORAGE_LIMIT_MB, 256) * 1024 * 1024,
       vaultsPerUser: integer(env.VAULTS_PER_USER, 50),

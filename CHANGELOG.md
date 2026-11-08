@@ -21,6 +21,13 @@ Notable changes, newest first. This project follows
 
 ### New
 
+- Chat requests: `/ravelon <request>` in Slack or Discord reaches the Ravelon
+  desktop of an account that linked that chat identity and allowed the
+  channel and person, as a draft that runs only when someone starts it there.
+  Replies go back as text. Migration `005_chat_requests`; set
+  `SLACK_SIGNING_SECRET`/`SLACK_BOT_TOKEN` or
+  `DISCORD_PUBLIC_KEY`/`DISCORD_BOT_TOKEN` to offer it.
+
 - `scripts/generate-env.sh` asks for the public URL, database and mail,
   generates the secrets and writes `.env`. Run again with `--force` to change
   it; existing values are kept.
