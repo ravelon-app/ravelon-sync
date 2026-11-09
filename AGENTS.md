@@ -1,137 +1,66 @@
-# Repository guidelines
+# Ravelon Sync agent guidance
 
-## What this is
+This is the short entry point for Claude, Codex, Cursor and other agents.
+Read only the linked sections relevant to the task. Current user instructions
+take precedence; preserve other people's files, staging and worktrees.
 
-Ravelon Sync is a self-hosted, zero-knowledge sync server for Ravelon clients.
-The defining constraint: **the server stores ciphertext it cannot read**. Any
-change that would let it read vault contents, or that quietly weakens a check
-protecting that property, is wrong regardless of what it makes easier.
+## 1. Ownership
 
-## Structure
+**MIT open-source self-hosted** Fastify API (`server/`) and React admin UI
+(`web/`). This server stores opaque encrypted client data. It is free self-hosting
+without licence checks. **The commercial Pro Cloud API and billing belong to
+`ravelon-website/server/`**, not this repo. Desktop and iOS are separate clients.
 
-- `server/src/` — Fastify API. `routes/` holds one file per area, `lib/` the
-  shared primitives, `auth/` sessions and two-factor, `db/` the database
-  abstraction and migrations.
-- `server/test/` — Node's test runner, in-memory SQLite, one file per area.
-- `web/src/` — React interface. `pages/` routed screens, `components/` shared
-  UI, `lib/` API client, auth context, i18n and formatting.
-- `web/src/locales/` — one file per language. English is the source.
-- `docs/` — installation, configuration, security model, API, backup.
+Use [repositories.md](docs/agents/repositories.md) for branches and shared wire
+changes. Default PR target is this repo's `main`. Equal branch names across
+repos do not share history; confirm peers and deployment order explicitly.
 
-The web build outputs to `server/public/`, which the server serves. Do not
-commit it, or `dist/`, `node_modules/`, `data/`, or any `.env`.
+## 2. Efficient execution
 
-## Commands
+Check repo/branch/dirty files once. Use scoped `rg`, nearby code and relevant
+sections of [repository-guide.md](docs/agents/repository-guide.md). Do not load
+all docs/chats or repeat full scans. One agent by default, at most two bounded
+independent children and no nested delegation. Act on clear authorized work.
+No unrelated dependency upgrades, formatting or extra feature PRs. Follow
+[workflow.md](docs/agents/workflow.md) for scope, handoffs and resource ownership.
 
-```sh
-npm install
-npm run dev:server     # API on 4100
-npm run dev:web        # interface on 5174, proxying the API
-npm test
-npm run typecheck
-npm run lint           # Biome: lint and formatting check
-npm run lint:fix       # apply safe lint fixes and formatting
-npm run build
-```
+## 3. Verification
 
-A change is not done until `npm test`, `npm run typecheck`, `npm run lint`
-and `npm run build` all pass.
+Guidance: `python3 -B docs/agents/check.py` and
+`python3 -B docs/agents/check_test.py`; no GUI/install needed.
+Code: focused regression, then `npm test`, `npm run typecheck`, `npm run lint`
+and `npm run build`. Use [checks.md](docs/agents/checks.md); check every applicable
+Node/PostgreSQL CI job on the final head SHA. Reuse verified CI, not stale runs.
 
-## Style
+## 4. Security
 
-TypeScript everywhere. Two-space indent, semicolons. Server uses single
-quotes, the web interface double quotes. Biome (`biome.jsonc`) enforces the
-formatting and lint rules; run `npm run lint:fix` rather than formatting by
-hand. React components in PascalCase, hooks
-prefixed `use`, helpers camelCase.
+The server never decrypts vault contents. Preserve constant-time comparisons,
+auth/access controls, reauthentication/MFA, opaque errors and proxy trust.
+Never log tokens, ciphertext, passwords or recovery codes. Never commit secrets,
+`.env`, keys, data or build output. Append migrations; never edit shipped ones.
+Read affected domain invariants in the [guide](docs/agents/repository-guide.md).
+Never weaken checks, delete tests or add permissive fallbacks to get green.
 
-Comments explain why, not what. Restating the line below adds nothing; naming
-the failure a piece of code prevents is worth keeping. Avoid Unicode dash
-punctuation in source text.
+## 5. Design and reference tools
 
-Every visible string in the interface goes through `useI18n`. A hardcoded
-string cannot be translated later without editing the component again.
+Use existing components and `web/src/index.css` semantic tokens: current dark
+palette, Inter UI and JetBrains Mono for technical text. Copy uses `useI18n`.
+Follow [UI acceptance](docs/agents/ui-checklist.md); inspect the actual flow,
+focus, responsive sizes, locales and applicable states before presenting it.
+For significant workflows compare the relevant Warp, Termius, Codex, Claude
+Code, T3 Code or Orca.dev flow and available source using
+[reference-tools.md](docs/agents/reference-tools.md). Adapt to this product.
 
-Visible copy should sound like the person who built Ravelon showing it to a
-colleague: short, plain, one idea per sentence, the information an admin
-needs and nothing more. Details belong in the README or docs, not in a form
-or an error message. No brochure words (seamless/nahtlos, powerful,
-effortless/mühelos), no fine print about defaults, and English and German
-each written as if that language came first. The full guide with examples is
-`docs/writing.md` in ravelon-website:
-https://github.com/ravelon-app/ravelon-website/blob/main/docs/writing.md
+## 6. Completion
 
-## Security rules
+Work on a scoped branch and stage only this task's files/hunks. Never push
+directly to `main`, force-push or bypass checks/hooks/reviews. **Standing
+authorization: automatically squash-merge your own verified task PR without
+asking again**, following [Automatic merge](docs/agents/workflow.md#automatic-merge).
+All applicable checks/review/UI evidence must pass on the current head SHA;
+draft/review-only requests or an instruction to leave it open take precedence.
+Verify `MERGED`, not merely enabled auto-merge. Release/tag/publication/manual
+rollout still requires explicit authority. Report actual tests and material gaps.
 
-These are not style preferences.
-
-- Never log or return tokens, ciphertext, password material or recovery codes.
-- Keep constant-time comparison for anything secret.
-- Fail closed. An unexpected state refuses; it does not allow.
-- Do not widen what an error reveals. "Vault not found or not accessible" is
-  one message on purpose, so probing cannot distinguish the two cases.
-- Do not resolve a security finding by deleting the check that surfaced it,
-  relaxing `TRUSTED_PROXY_IPS`, or skipping authentication.
-- Sensitive account changes require the password again, and a second factor
-  where one is enrolled.
-- Never commit secrets, `.env`, or key material.
-
-## Testing
-
-Add focused tests for changed behaviour. Files are `*.test.ts` under
-`server/test/`. Authentication, sync conflict handling, access control and
-two-factor need a test for anything that changes, because a regression there
-is silent.
-
-Tests run against in-memory SQLite with rate limiting off. When a test needs a
-fresh TOTP step, clear `last_totp_step` rather than sleeping.
-
-## Agent automation
-
-Dependabot opens grouped weekly dependency updates; majors are left to a human.
-Claude answers `@claude` on issues and pull requests, but only for accounts
-that already have write access, because this repository is public.
-
-Hard limits for every agent here:
-
-- Never push to `main`. Never merge. Never force-push.
-- Never commit secrets, `.env`, or key material.
-- Do not resolve a security finding by deleting the check that surfaced it.
-- A change is not done until `npm test`, `npm run typecheck`,
-  `npm run lint` and `npm run build` pass.
-- Do not silence a lint finding in security code by disabling the rule;
-  fix it, or explain a targeted `biome-ignore` in its comment.
-
-## Review guidelines
-
-Flag P0 and P1 only: authentication bypass, anything that would let the server
-read vault contents, leaked secrets, broken access control, a lost audit trail,
-and CI that no longer runs the tests. Ignore style nits and optional refactors.
-Treat Dependabot lockfile-only pull requests as review-only unless tests fail.
-
-## Commits and pull requests
-
-Short imperative summaries, one outcome each. Pull requests explain user
-impact, list the commands run, and call out migrations, new environment
-variables and security consequences explicitly.
-
-Never edit a migration that has shipped. Append a new one.
-
-## Problems you find
-
-Fix every problem you come across while working, right away. That covers
-errors; compiler, linter and console warnings; failing or flaky tests; checks
-that are skipped or never run; documentation that contradicts the code; and
-anything else that is wrong. It does not matter whether your change caused it
-or it was already on `main`.
-
-- Small and related to your change: fix it in the same change. Otherwise open
-  its own branch and pull request right away. A note for later is not a fix.
-- Fix the cause instead of silencing the finding with an ignore comment, a
-  skipped test or a loosened check. Never leave a known problem only in a
-  summary or a list of follow-ups.
-- If you see that an approach will not hold, because it is slow, fragile, hard
-  to maintain or will not scale, say so, explain why, and propose or build the
-  better way instead of patching around it.
-- The rest of this file still applies: the security rules, merging only when
-  asked and no release actions without a request.
+Track resources before opening them and clean up only your own tabs/sessions,
+servers and containers; verify process start time and preserve shared services.

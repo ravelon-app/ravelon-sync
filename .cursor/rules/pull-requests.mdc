@@ -1,0 +1,8 @@
+---
+description: Shared repository guidance and completion policy
+alwaysApply: true
+---
+
+Read AGENTS.md once. It is the canonical guidance for this repository.
+For completion use [the shared workflow](../../docs/agents/workflow.md#automatic-merge).
+Do not maintain a second copy of the merge policy here.

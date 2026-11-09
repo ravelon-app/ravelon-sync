@@ -1,0 +1,38 @@
+name: Agent guidance
+
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - CLAUDE.md
+      - .claude/**
+      - .cursor/**
+      - docs/agents/**
+      - .github/workflows/agent-guidance.yml
+  push:
+    branches: [main]
+    paths:
+      - AGENTS.md
+      - CLAUDE.md
+      - .claude/**
+      - .cursor/**
+      - docs/agents/**
+      - .github/workflows/agent-guidance.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-guidance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guidance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check instruction consistency and context budget
+        run: python3 -B docs/agents/check.py
+      - name: Test broken guidance fixtures
+        run: python3 -B docs/agents/check_test.py
