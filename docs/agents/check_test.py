@@ -72,6 +72,10 @@ class GuidanceTests(unittest.TestCase):
         self.write('docs/agents/checks.md', 'Ohne diese Bitte bleibt der Pull Request offen.\n')
         self.assert_problem('obsolete merge')
 
+    def test_obsolete_german_word_order_in_role(self):
+        self.write('.claude/agents/dependabot.md', '---\nname: dependabot\ndescription: Updates\n---\nJeder andere Autor: mergen nur, wenn der Nutzer es ausdrücklich verlangt.\n[Workflow](../../docs/agents/workflow.md)\n')
+        self.assert_problem('obsolete merge')
+
     def test_unverified_merge_contract_is_not_accepted(self):
         self.write('docs/agents/workflow.md', '# Workflow\n\n## Automatic merge\nMerge immediately.\n')
         self.assert_problem('merge contract')

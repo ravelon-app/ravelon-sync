@@ -322,7 +322,7 @@ describe('chat requests', () => {
     );
   });
 
-  test('waiting requests are capped per account, and old ones are cleaned up', async () => {
+  test('waiting requests are capped per account, and old ones are cleaned up', async (context) => {
     const owner = await register(server, 'busy@example.com');
     const code = await api(server, 'POST', '/v1/chat/link-codes', {
       token: owner.accessToken,
@@ -330,8 +330,12 @@ describe('chat requests', () => {
     });
     const where = { team_id: 'T0300', user_id: 'U0300', channel_id: 'C0300' };
     await slack(server, { text: `link ${code.body.code}`, ...where });
-    for (let index = 0; index <= MAX_WAITING_PER_USER; index += 1)
+    context.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    // Distinct timestamps make the oldest-first expectation independent of request speed.
+    for (let index = 0; index <= MAX_WAITING_PER_USER; index += 1) {
       await slack(server, { text: `request ${index}`, ...where });
+      context.mock.timers.tick(1);
+    }
     const taken = (await api(server, 'POST', '/v1/chat/requests/take', { token: owner.accessToken })).body
       .requests;
     assert.equal(taken.length, MAX_WAITING_PER_USER);

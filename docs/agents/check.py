@@ -14,7 +14,7 @@ STALE = re.compile(
     r'\bnever merge\b|only standing exception|einzige dauerhafte Ausnahme|'
     r'Ohne diese (?:ausdr.ckliche )?(?:Bitte|Aufforderung).*?offen|'
     r'(?:merge|mergen).*?only when.*?explicitly asks|'
-    r'(?:nur mergen|mergst du nur).*?ausdr.cklich', re.I,
+    r'(?:nur mergen|mergst du nur|mergen nur).*?ausdr.cklich', re.I,
 )
 
 
