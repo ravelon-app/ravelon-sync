@@ -29,6 +29,7 @@ where the boundary actually sits.
 | How large each encrypted record is | What makes it that size |
 | When a record changed, and from which device | What changed |
 | Team and vault membership | What is in a team's vault |
+| That an account shared a public link, its size and expiry | What the shared page shows: it is sealed under a key that stays in the link |
 | Chat requests from Slack and Discord, as typed, for up to seven days, and the chat ids allowed to send them | Anything about the work an agent does with one |
 
 Record type and timing are metadata the sync protocol needs to order changes
@@ -159,6 +160,14 @@ no plugins, no framing), `nosniff`, `no-referrer`, `DENY` framing, a
 restrictive `Permissions-Policy` and `Cross-Origin-Opener-Policy` on every
 response, and HSTS on requests that arrived over HTTPS. API responses are
 `no-store`; hashed interface assets are cached as immutable.
+
+Public link pages (`/p/`) get a policy of their own: `default-src 'none'`,
+only their own script and their request for the sealed bytes, inline styles
+and `data:` images. The shared page is shown in a frame with an empty
+`sandbox` (no script, no form, no popup, an opaque origin) that inherits the
+same policy, so a shared page loads nothing from anywhere and cannot reach
+the signed-in interface on the same origin. These responses are `no-store`
+and `noindex`, so a revoked link stops working at once.
 
 ## Audit
 

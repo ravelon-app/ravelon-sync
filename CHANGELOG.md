@@ -21,6 +21,11 @@ Notable changes, newest first. This project follows
 
 ### New
 
+- Public links: the Ravelon desktop app can share an artifact or agent
+  thread as a page anyone with the link can open for 1, 7 or 30 days, and
+  revoke it at any time. The page is sealed on the desktop under a key that
+  only the link holds, so the server stores it without being able to read
+  it. Migration `004_public_links` adds the table.
 - Chat requests: `/ravelon <request>` in Slack or Discord reaches the Ravelon
   desktop of an account that linked that chat identity and allowed the
   channel and person, as a draft that runs only when someone starts it there.

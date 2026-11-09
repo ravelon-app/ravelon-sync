@@ -354,6 +354,26 @@ Every route needs `role=admin` and answers `403 admin_required` otherwise.
 | `PUT /v1/admin/settings/smtp` | Mail; the password is never returned |
 | `GET /v1/admin/system` | Version, database, and what needs attention |
 
+## Public links
+
+A signed-in account shares a sealed page (an artifact or agent thread from the
+Ravelon desktop app) under a link that anyone can open until it expires or is
+revoked. The client seals the page with AES-256-GCM under a new key per link
+(associated data `ravelon-public-link-v1`, nonce first, tag last) and puts the
+key in the link's `#fragment`, which browsers never send. The server stores
+and serves the sealed bytes; it cannot open them.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /v1/public-links` | `{ sealed, expiresInDays }`: `sealed` is the base64 of the sealed page (at most 3 MB decoded, never valid UTF-8, so a page in the clear is refused with `400 plaintext_refused`), `expiresInDays` is 1, 7 or 30. `201 { id, url, createdAt, expiresAt }`; `url` is `<PUBLIC_URL>/p/<22 characters>` without a key. At most 50 links per account are up at once (`409 link_limit_reached`). Needs a confirmed address where sync does. |
+| `GET /v1/public-links` | `{ links: [{ id, url, createdAt, expiresAt }] }`: the account's links that have not expired, newest first. Never the sealed bytes. |
+| `DELETE /v1/public-links/:id` | Revokes a link at once. `404 link_not_found` for another account's link. |
+| `GET /v1/public-links/content/:publicId` | No session: `{ sealed, expiresAt }` while the link is up, `404 link_not_found` once it expired or was revoked. 120 requests per IP and minute. |
+| `GET /p/:publicId` | The page a link opens: it fetches the sealed bytes, opens them with the fragment's key in the browser and shows the result in a frame with an empty `sandbox`. The same page for every id. |
+
+Expired links are deleted by the daily cleanup and are never served before
+that. Deleting an account deletes its links.
+
 ## Status codes
 
 | Code | Meaning |
