@@ -75,3 +75,9 @@ cleanup deletes expired codes and requests. An account keeps at most 50
 waiting requests (the oldest make room), a workspace may send 60 requests a
 minute, and the chat app routes take 120 requests per IP and minute before
 their signature is checked. Deleting an account deletes its links and requests.
+
+Migration `006_chat_request_order` adds `chat_requests.seq`, a per-account
+counter that orders requests by arrival, also when several share a
+millisecond; requests are handed out and make room in that order. A reply is
+counted before it is posted, so replies sent at the same time cannot pass
+three, and a reply the chat app does not take is not counted.

@@ -400,4 +400,16 @@ CREATE INDEX idx_chat_requests_user ON chat_requests(user_id, taken_at);
 CREATE INDEX idx_chat_requests_expiry ON chat_requests(expires_at);
 `,
   },
+  {
+    // Orders one account's chat requests by arrival. created_at has
+    // millisecond precision and ids are random, so requests from the same
+    // millisecond had no defined order: the waiting cap could drop a newer
+    // request instead of the oldest. Rows from before keep seq 0 and sort
+    // first, by created_at.
+    name: '006_chat_request_order',
+    sql: `
+ALTER TABLE chat_requests ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_chat_requests_order ON chat_requests(user_id, seq);
+`,
+  },
 ];
