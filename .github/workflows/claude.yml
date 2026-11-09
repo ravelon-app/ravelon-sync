@@ -2,7 +2,8 @@ name: Claude
 
 # Responds to @claude on issues and pull requests. Needs the Claude GitHub App
 # on this repository and CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`).
-# Never merge. Never push to main.
+# Follow AGENTS.md and docs/agents/workflow.md for verified task completion.
+# Never push to main or bypass checks.
 #
 # Unlike the copy in the private repositories, this one only answers people who
 # already have write access. This repository is meant to be public, and without
