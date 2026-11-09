@@ -30,6 +30,7 @@ where the boundary actually sits.
 | When a record changed, and from which device | What changed |
 | Team and vault membership | What is in a team's vault |
 | That an account shared a public link, its size and expiry | What the shared page shows: it is sealed under a key that stays in the link |
+| Chat requests from Slack and Discord, as typed, for up to seven days, and the chat ids allowed to send them | Anything about the work an agent does with one |
 
 Record type and timing are metadata the sync protocol needs to order changes
 and detect conflicts. An operator can tell that someone added twelve hosts on
@@ -127,6 +128,17 @@ owner on transfer, and a deleted team administrator's vaults stay with the team.
 Under the `domain` sign-up policy an account syncs only after confirming its
 address. Anyone can type an address at an allowed domain; only the mailbox
 owner can confirm it.
+
+## Chat requests
+
+`/ravelon` requests from Slack and Discord ([CHAT_REQUESTS.md](CHAT_REQUESTS.md))
+are accepted only with the platform's signature (Slack HMAC-SHA256, Discord
+Ed25519) from the last five minutes, and only for accounts that linked that
+chat identity with a one-time code and allowed the channel and the person.
+The server stores the request text and hands it to the desktop once; it never
+starts anything. Bot tokens and signing secrets live only in the server's
+environment. Replies are text the person sends from the desktop, with
+mentions neutralised.
 
 ## Rate limiting
 

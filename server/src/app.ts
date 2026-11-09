@@ -15,6 +15,7 @@ import { RateLimiter } from './lib/rate-limit.js';
 import { SyncEventHub } from './lib/sync-events.js';
 import { SYNC_BODY_LIMIT_BYTES } from './routes/sync.js';
 import { registerAgentRelayRoutes } from './routes/agent-relay.js';
+import { registerChatRequestRoutes } from './routes/chat-requests.js';
 import { PUBLIC_LINK_POLICY, registerPublicLinkRoutes } from './routes/public-links.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -211,6 +212,7 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
   registerAdminRoutes(app, context);
   registerClientRoutes(app, context);
   registerPublicLinkRoutes(app, context);
+  registerChatRequestRoutes(app, context);
 
   await registerWebInterface(app, config);
 

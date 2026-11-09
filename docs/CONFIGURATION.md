@@ -109,6 +109,14 @@ says: there is nobody else who could permit it.
 `closed` removes the public form, not administrator invitations. That is what
 makes it usable as "I create every account by hand".
 
+## Chat requests
+
+`SLACK_SIGNING_SECRET` with `SLACK_BOT_TOKEN`, and `DISCORD_PUBLIC_KEY` with
+`DISCORD_BOT_TOKEN`, turn on `/ravelon` requests from Slack and Discord. A
+platform is offered only when both of its values are set; a public key that is
+not 64 hex characters stops the start. See [CHAT_REQUESTS.md](CHAT_REQUESTS.md)
+for setting up the apps.
+
 ## Agent relay
 
 `AGENT_RELAY_HOST_LIMIT` sets the number of registered live-agent hosts per account
