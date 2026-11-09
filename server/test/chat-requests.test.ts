@@ -136,7 +136,8 @@ describe('chat requests', () => {
       ['channel:C0001', 'member:U0001'],
     );
 
-    assert.match((await slack(server, { text: 'fix the build' })).body.text, /Nothing runs/);
+    // Control characters other than line breaks and tabs are dropped on the way in.
+    assert.match((await slack(server, { text: 'fix the\u0007 build\u0000' })).body.text, /Nothing runs/);
     assert.match(
       (await slack(server, { text: 'from elsewhere', channel_id: 'C0002' })).body.text,
       /not set up/,

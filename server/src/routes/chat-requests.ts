@@ -79,12 +79,16 @@ function newCode(): string {
   return code;
 }
 
+/** A control character other than tab, line feed and carriage return. */
+function unwantedControl(code: number): boolean {
+  return (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) || code === 0x7f;
+}
+
 function clean(text: string, max: number): string {
   // Control characters other than line breaks and tabs never reach the desktop.
-  return text
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-    .trim()
-    .slice(0, max);
+  let kept = '';
+  for (const char of text) if (!unwantedControl(char.codePointAt(0) ?? 0)) kept += char;
+  return kept.trim().slice(0, max);
 }
 
 export function registerChatRequestRoutes(app: FastifyInstance, context: RouteContext): void {
