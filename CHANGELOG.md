@@ -57,6 +57,11 @@ Notable changes, newest first. This project follows
 
 ### Fixed
 
+- Chat requests that arrived in the same millisecond had no defined order, so
+  the limit of 50 waiting requests could drop a newer one instead of the
+  oldest. Migration `006_chat_request_order` keeps the arrival order.
+- Replies to a chat request sent at the same time could pass the limit of
+  three, and a reply the chat app refused still counted for one.
 - Deleting a vault or team and signing out a device worked, but the dialog
   stayed open and the list unchanged
 - Saving the general settings showed no confirmation, and a refused mail test

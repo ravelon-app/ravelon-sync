@@ -212,7 +212,7 @@ export function registerChatRequestRoutes(app: FastifyInstance, context: RouteCo
         `SELECT r.id, r.channel_id, r.channel_label, r.member_id, r.member_label, r.text, r.created_at, r.expires_at,
                 l.platform, l.workspace_label
          FROM chat_requests r JOIN chat_links l ON l.id = r.link_id
-         WHERE r.user_id = ? AND r.taken_at IS NULL AND r.expires_at > ? ORDER BY r.created_at`,
+         WHERE r.user_id = ? AND r.taken_at IS NULL AND r.expires_at > ? ORDER BY r.seq, r.created_at, r.id`,
       )
       .all<{
         id: string;
@@ -257,28 +257,30 @@ export function registerChatRequestRoutes(app: FastifyInstance, context: RouteCo
       .parse(request.body);
     const row = await db
       .prepare(
-        `SELECT r.channel_id, r.member_id, r.replies, l.platform FROM chat_requests r JOIN chat_links l ON l.id = r.link_id
+        `SELECT r.channel_id, r.member_id, l.platform FROM chat_requests r JOIN chat_links l ON l.id = r.link_id
          WHERE r.id = ? AND r.user_id = ? AND r.expires_at > ?`,
       )
-      .get<{ channel_id: string; member_id: string; replies: number; platform: ChatPlatform }>(
-        id,
-        auth.user.id,
-        nowIso(),
-      );
+      .get<{ channel_id: string; member_id: string; platform: ChatPlatform }>(id, auth.user.id, nowIso());
     if (!row) throw new ApiError(404, 'chat_request_not_found', 'This request has expired or was removed');
-    if (row.replies >= MAX_REPLIES) {
-      throw new ApiError(409, 'chat_reply_limit', 'This request was answered three times already');
-    }
     if (!enabled(row.platform))
       throw new ApiError(404, 'chat_unavailable', 'This server is not set up for this chat app');
+    // Claim a reply before posting, so replies sent at the same time cannot pass the limit.
+    const claimed = await db
+      .prepare('UPDATE chat_requests SET replies = replies + 1 WHERE id = ? AND user_id = ? AND replies < ?')
+      .run(id, auth.user.id, MAX_REPLIES);
+    if (!claimed.changes) {
+      throw new ApiError(409, 'chat_reply_limit', 'This request was answered three times already');
+    }
     const posted = await postChatReply(
       config,
       { platform: row.platform, channelId: row.channel_id, memberId: row.member_id },
       clean(text, MAX_REPLY_CHARS),
     );
-    if (!posted)
+    if (!posted) {
+      // A reply the chat app did not take does not count.
+      await db.prepare('UPDATE chat_requests SET replies = replies - 1 WHERE id = ? AND replies > 0').run(id);
       throw new ApiError(502, 'chat_reply_failed', 'The chat app did not take the reply. Try again later');
-    await db.prepare('UPDATE chat_requests SET replies = replies + 1 WHERE id = ?').run(id);
+    }
     await audit(db, auth.user.id, 'chat.reply', id, null, clientIp(request));
     return { posted: true };
   });
@@ -315,10 +317,16 @@ export function registerChatRequestRoutes(app: FastifyInstance, context: RouteCo
     const now = new Date();
     for (const target of targets) {
       await db.transaction(async () => {
+        // One account's sequence: serialized on PostgreSQL; SQLite transactions are already serialized.
+        if (db.dialect === 'postgres')
+          await db.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(target.user_id);
+        const last = await db
+          .prepare('SELECT MAX(seq) AS n FROM chat_requests WHERE user_id = ?')
+          .get<{ n: number | string | null }>(target.user_id);
         await db
           .prepare(
-            `INSERT INTO chat_requests (id, user_id, link_id, channel_id, channel_label, member_id, member_label, text, created_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO chat_requests (id, user_id, link_id, channel_id, channel_label, member_id, member_label, text, created_at, expires_at, seq)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             newId(),
@@ -331,11 +339,12 @@ export function registerChatRequestRoutes(app: FastifyInstance, context: RouteCo
             text,
             now.toISOString(),
             new Date(now.getTime() + REQUEST_TTL_MS).toISOString(),
+            Number(last?.n ?? 0) + 1,
           );
         // Waiting requests beyond the limit make room, oldest first.
         const waiting = await db
           .prepare(
-            'SELECT id FROM chat_requests WHERE user_id = ? AND taken_at IS NULL ORDER BY created_at DESC, id DESC',
+            'SELECT id FROM chat_requests WHERE user_id = ? AND taken_at IS NULL ORDER BY seq DESC, created_at DESC, id DESC',
           )
           .all<{ id: string }>(target.user_id);
         for (const old of waiting.slice(MAX_WAITING_PER_USER)) {

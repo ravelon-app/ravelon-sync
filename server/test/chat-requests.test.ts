@@ -278,6 +278,61 @@ describe('chat requests', () => {
     assert.equal(tooLong.status, 400);
   });
 
+  test('replies sent at the same time stay within three, and a reply the chat app refuses does not count', async () => {
+    const owner = await register(server, 'racing@example.com');
+    const code = await api(server, 'POST', '/v1/chat/link-codes', {
+      token: owner.accessToken,
+      body: { platform: 'slack' },
+    });
+    const where = { team_id: 'T0400', user_id: 'U0400', channel_id: 'C0400' };
+    await slack(server, { text: `link ${code.body.code}`, ...where });
+    await slack(server, { text: 'one', ...where });
+    await slack(server, { text: 'two', ...where });
+    const [first, second] = (
+      await api(server, 'POST', '/v1/chat/requests/take', { token: owner.accessToken })
+    ).body.requests;
+
+    const restore = () =>
+      setChatTransportForTests(async (url, init) => {
+        posts.push({ url, init });
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      });
+    // A slow chat app, so the five replies are all in flight together.
+    setChatTransportForTests(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    try {
+      const statuses = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          api(server, 'POST', `/v1/chat/requests/${first.id}/reply`, {
+            token: owner.accessToken,
+            body: { text: 'at once' },
+          }).then((response) => response.status),
+        ),
+      );
+      assert.deepEqual(statuses.sort(), [200, 200, 200, 409, 409]);
+    } finally {
+      restore();
+    }
+
+    setChatTransportForTests(async () => new Response(JSON.stringify({ ok: false }), { status: 200 }));
+    try {
+      const refused = await api(server, 'POST', `/v1/chat/requests/${second.id}/reply`, {
+        token: owner.accessToken,
+        body: { text: 'not taken' },
+      });
+      assert.equal(refused.status, 502);
+      assert.equal(refused.body.error.code, 'chat_reply_failed');
+    } finally {
+      restore();
+    }
+    const row = await server.db
+      .prepare('SELECT replies FROM chat_requests WHERE id = ?')
+      .get<{ replies: number }>(second.id);
+    assert.equal(Number(row?.replies), 0);
+  });
+
   test('a chat identity belongs to one account, and only its owner manages the link', async () => {
     const first = await register(server, 'first@example.com');
     const second = await register(server, 'second@example.com');
@@ -338,8 +393,11 @@ describe('chat requests', () => {
     }
     const taken = (await api(server, 'POST', '/v1/chat/requests/take', { token: owner.accessToken })).body
       .requests;
-    assert.equal(taken.length, MAX_WAITING_PER_USER);
-    assert.equal(taken[0].text, 'request 1');
+    // The newest 50 in the order they arrived, also when several share a millisecond.
+    assert.deepEqual(
+      taken.map((entry: { text: string }) => entry.text),
+      Array.from({ length: MAX_WAITING_PER_USER }, (_, index) => `request ${index + 1}`),
+    );
 
     await server.db
       .prepare('UPDATE chat_requests SET expires_at = ? WHERE user_id = ?')
