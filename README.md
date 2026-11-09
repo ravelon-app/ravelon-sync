@@ -81,6 +81,7 @@ The overview page in the web interface shows the exact URL to enter.
 | **Authenticator secrets** | AES-256-GCM with a key derived for that purpose alone. |
 | **Recovery codes** | Shown once. Only keyed HMAC digests are stored. |
 | **Plaintext guard** | A push that looks like unencrypted JSON is refused, so a client bug cannot quietly put real credentials on the server. |
+| **Public links** | A page shared from the desktop app is sealed there under a key that only the link holds (in its `#fragment`); the server stores and expires it without being able to read it. |
 
 A push of plaintext is rejected rather than stored. An administrator can see
 that a vault holds 340 records and 2 MB, and has no way to see what is in one:
