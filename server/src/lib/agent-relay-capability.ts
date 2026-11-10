@@ -10,5 +10,6 @@ export async function agentRelayCapability(context: RouteContext, auth: AuthCont
     enabled: true,
     canConnect: !emailVerificationRequired(platform) || Boolean(auth.user.email_verified),
     hostLimit: context.config.agentRelay.hostLimit,
+    ...(context.pushRelay ? { attention: 1 as const } : {}),
   };
 }

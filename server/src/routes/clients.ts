@@ -2,35 +2,37 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { requireAuth } from '../auth/sessions.js';
-import type { RouteContext } from './context.js';
+import { pushRegistration } from '../lib/push-relay.js';
+import { assertCanSync, type RouteContext } from './context.js';
 
-/**
- * Answers for client features that exist only on the hosted service.
- *
- * Ravelon clients talk to whichever server the account is signed in to, so a
- * self-hosted deployment is asked about push notifications and usage counters
- * too. A 404 there reads to a client as a broken server; these routes give the
- * honest answer instead: nothing is collected and no push is sent.
- */
+/** Optional push relay registration; telemetry always remains disabled. */
 export function registerClientRoutes(app: FastifyInstance, context: RouteContext): void {
   const { db, config } = context;
 
-  /**
-   * APNs registration from the iOS app.
-   *
-   * Sending a push needs the publisher's Apple signing key, which a
-   * self-hosted deployment does not have. The device token is therefore not
-   * stored; the client keeps its WebSocket and background refresh instead.
-   */
   app.post('/v1/push/devices', async (request) => {
-    await requireAuth(db, config, request);
-    z.object({
-      token: z.string().min(1).max(512),
-      platform: z.string().min(1).max(40),
-      environment: z.string().min(1).max(40),
-      topic: z.string().min(1).max(200),
-    }).parse(request.body);
-    return { registered: false };
+    const auth = await requireAuth(db, config, request);
+    if (!context.pushRelay) {
+      // Preserve the pre-relay compatibility response without retaining a token.
+      z.object({
+        token: z.string().min(1).max(512),
+        platform: z.string().min(1).max(40),
+        environment: z.string().min(1).max(40),
+        topic: z.string().min(1).max(200),
+        agentAlerts: z.boolean().optional(),
+      }).parse(request.body);
+      return { registered: false };
+    }
+    await assertCanSync(context, Boolean(auth.user.email_verified));
+    const input = pushRegistration.parse(request.body);
+    await context.pushRelay.register(auth.user.id, auth.deviceId, input, () =>
+      requireAuth(db, config, request),
+    );
+    return { registered: true };
+  });
+  app.delete('/v1/push/devices', async (request, reply) => {
+    const auth = await requireAuth(db, config, request);
+    await context.pushRelay?.remove(auth.user.id, auth.deviceId);
+    return reply.code(204).send();
   });
 
   /** This server collects no usage counters from any client. */

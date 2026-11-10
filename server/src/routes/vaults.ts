@@ -32,7 +32,7 @@ import {
 } from './context.js';
 
 export function registerVaultRoutes(app: FastifyInstance, context: RouteContext): void {
-  const { db, config, syncEvents } = context;
+  const { db, config } = context;
 
   app.get('/v1/vaults', async (request) => {
     const auth = await requireAuth(db, config, request);
@@ -337,11 +337,14 @@ export function registerVaultRoutes(app: FastifyInstance, context: RouteContext)
       },
       clientIp(request),
     );
-    syncEvents.publish({
-      type: 'vaultChanged',
-      vaultId: vault.id,
-      cursor: String(await vaultCursor(db, vault.id)),
-    });
+    await context.publishVaultChange(
+      {
+        type: 'vaultChanged',
+        vaultId: vault.id,
+        cursor: String(await vaultCursor(db, vault.id)),
+      },
+      auth.deviceId,
+    );
     return restored;
   });
 }

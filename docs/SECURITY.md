@@ -22,6 +22,16 @@ where the boundary actually sits.
 
 ## What the server can see
 
+When an operator explicitly configures the HTTPS push relay and a person opts
+in to agent alerts, delivery adds APNs tokens, event kind, computer UUID and
+timing as metadata. Sealed references stay opaque. Prompts, titles, paths,
+output and plaintext thread IDs never enter this API. A request may filter
+blocked device IDs already belonging to the account; the filter is neither
+stored nor sent to the relay. Alert preferences default off, and live-session
+selection excludes revocation, expiry and disabled accounts. The removal
+outbox holds only an opaque subscription ID and APNs token until cleanup
+succeeds; failed cleanup cannot make a local registration eligible again.
+
 | It sees | It cannot see |
 | --- | --- |
 | Email addresses and display names | Hostnames, usernames, passwords, SSH keys |

@@ -412,4 +412,27 @@ ALTER TABLE chat_requests ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX idx_chat_requests_order ON chat_requests(user_id, seq);
 `,
   },
+  {
+    name: '007_push_relay',
+    sql: `
+CREATE TABLE push_devices (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  environment TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  agent_alerts INTEGER NOT NULL DEFAULT 0,
+  registered INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_push_devices_user ON push_devices(user_id, agent_alerts);
+CREATE INDEX idx_push_devices_device ON push_devices(device_id);
+CREATE TABLE push_relay_removals (id TEXT PRIMARY KEY, token TEXT NOT NULL);
+CREATE TABLE agent_attention_limits (host_key TEXT PRIMARY KEY, times TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX idx_agent_attention_limits_updated ON agent_attention_limits(updated_at);
+`,
+  },
 ];

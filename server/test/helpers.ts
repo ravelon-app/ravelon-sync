@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 
-import { buildServer } from '../src/app.js';
+import { buildServer, type BuildServerOptions } from '../src/app.js';
 import { type Config, loadConfig } from '../src/config.js';
 import { type AppDatabase, openDatabase } from '../src/db/database.js';
 import type { SyncEventHub } from '../src/lib/sync-events.js';
+import { pushTestDatabase } from './fixtures/push-postgres.js';
 
 export interface TestServer {
   app: FastifyInstance;
@@ -20,7 +21,10 @@ export interface TestServer {
  * tests, so ordering never matters. Rate limits are off because the suite
  * makes many requests from one address on purpose.
  */
-export async function startTestServer(env: Record<string, string> = {}): Promise<TestServer> {
+export async function startTestServer(
+  env: Record<string, string> = {},
+  options: BuildServerOptions = {},
+): Promise<TestServer> {
   const config = loadConfig({
     NODE_ENV: 'test',
     DATABASE_FILE: ':memory:',
@@ -33,8 +37,9 @@ export async function startTestServer(env: Record<string, string> = {}): Promise
     ...env,
   } as NodeJS.ProcessEnv);
 
-  const db = await openDatabase({ databaseFile: ':memory:' });
-  const built = await buildServer(config, db);
+  const postgres = env.PUSH_TEST_POSTGRES === '1' ? await pushTestDatabase() : undefined;
+  const db = postgres?.database ?? (await openDatabase({ databaseFile: ':memory:' }));
+  const built = await buildServer(config, db, options);
   await built.app.ready();
 
   return {
@@ -46,6 +51,7 @@ export async function startTestServer(env: Record<string, string> = {}): Promise
       built.syncEvents.close();
       await built.app.close();
       await db.close();
+      await postgres?.cleanup();
     },
   };
 }

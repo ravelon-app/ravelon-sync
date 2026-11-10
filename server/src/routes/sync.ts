@@ -219,7 +219,7 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
         },
         clientIp(request),
       );
-      syncEvents.publish({ type: 'vaultChanged', vaultId: vault.id, cursor });
+      await context.publishVaultChange({ type: 'vaultChanged', vaultId: vault.id, cursor }, auth.deviceId);
     }
     return { cursor, results };
   });
