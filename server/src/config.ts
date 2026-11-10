@@ -48,6 +48,8 @@ export interface Config {
     from: string;
   };
   agentRelay: { hostLimit: number };
+  /** Optional publisher-operated push relay. Self-hosted sync never requires a licence. */
+  pushRelay?: { url: string; token: string };
   /**
    * Slack and Discord apps for chat requests (`routes/chat-requests.ts`).
    * A platform is offered only with both of its values. They stay on the
@@ -98,6 +100,30 @@ function chatConfig(env: NodeJS.ProcessEnv): Config['chat'] {
 
 const DEV_SECRET_PREFIX = 'dev-insecure-';
 
+function pushRelayConfig(env: NodeJS.ProcessEnv): Config['pushRelay'] {
+  const url = env.PUSH_RELAY_URL?.trim();
+  const token = env.PUSH_RELAY_SHARED_TOKEN?.trim();
+  if (!url && !token) return undefined;
+  if (!url || !token) throw new ConfigError('Set both PUSH_RELAY_URL and PUSH_RELAY_SHARED_TOKEN');
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ConfigError('PUSH_RELAY_URL must be an HTTPS origin');
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.pathname !== '/'
+  ) {
+    throw new ConfigError('PUSH_RELAY_URL must be an HTTPS origin without credentials, path or query');
+  }
+  return { url: parsed.origin, token };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const nodeEnv = normalizeNodeEnv(env.NODE_ENV);
   const production = nodeEnv === 'production';
@@ -146,6 +172,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       from: env.EMAIL_FROM?.trim() || 'Ravelon Sync <no-reply@localhost>',
     },
     agentRelay: { hostLimit: Math.min(100, Math.max(1, integer(env.AGENT_RELAY_HOST_LIMIT, 3))) },
+    pushRelay: pushRelayConfig(env),
     chat: chatConfig(env),
     limits: {
       vaultStorageBytes: integer(env.VAULT_STORAGE_LIMIT_MB, 256) * 1024 * 1024,

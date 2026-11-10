@@ -119,6 +119,26 @@ for setting up the apps.
 
 ## Agent relay
 
+`PUSH_RELAY_URL` and `PUSH_RELAY_SHARED_TOKEN` optionally enable iOS sync wakes
+and opted-in closed-app agent alerts. Set both, or leave both empty. The URL
+must be a fixed HTTPS origin without a path, credentials, query or fragment.
+Redirects are refused. The bearer is provisioned by the operator of the Cloud
+APNs relay and must match its configuration; no paid push vendor, Pro
+subscription or licence is required by this self-hosted server. Apple signing
+keys stay on the publisher-operated relay. Nothing is forwarded by default.
+
+Use a random shared bearer and keep it in the deployment secret store. The
+relay receives opaque subscription IDs, APNs token/environment/topic, session
+expiry and alert opt-in. A wake contains the event kind, computer UUID,
+timing and sealed thread reference, never titles or agent content. A
+`vaultChanged` wake carries only its cursor. Client opt-in is separate from
+deployment configuration. Disable the relay by clearing both variables and
+restarting; `attention:1` is then absent and device registration returns false.
+
+Deploy a Cloud relay that supports the strict attention event union and
+token-fenced DELETE endpoint before enabling these variables. See
+[AGENT_RELAY.md](AGENT_RELAY.md) for the API contract and local acceptance limits.
+
 `AGENT_RELAY_HOST_LIMIT` sets the number of registered live-agent hosts per account
 (default 3, clamped to 1 through 100). Self-hosted relay needs no licence. See
 [AGENT_RELAY.md](AGENT_RELAY.md) for transport limits and deployment requirements.

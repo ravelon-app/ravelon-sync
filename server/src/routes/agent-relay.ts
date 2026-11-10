@@ -7,6 +7,8 @@ import type { RouteContext } from './context.js';
 import { ApiError } from '../lib/errors.js';
 import { requireAuth } from '../auth/sessions.js';
 import { agentRelayCapability } from '../lib/agent-relay-capability.js';
+import { attentionBody } from '../lib/push-relay.js';
+import { claimAttentionBudget } from '../lib/agent-attention.js';
 
 const uuid = z.uuid().regex(/^[0-9a-f-]+$/);
 const registration = z.object({ clientId: uuid, label: z.string().trim().min(1).max(120) }).strict();
@@ -35,6 +37,22 @@ export function registerAgentRelayRoutes(app: FastifyInstance, context: RouteCon
   app.get('/v1/agents/capabilities', async (request) =>
     agentRelayCapability(context, await authenticate(request)),
   );
+  app.post('/v1/agents/hosts/:id/attention', { bodyLimit: 8192 }, async (request, reply) => {
+    const { auth } = await requireRelay(request);
+    const id = z.object({ id: uuid }).strict().parse(request.params).id;
+    const { excludedDeviceIds, ...input } = attentionBody.parse(request.body);
+    const host = await db
+      .prepare('SELECT * FROM agent_relay_hosts WHERE id = ? AND user_id = ?')
+      .get<HostRow>(id, auth.user.id);
+    if (!host) throw new ApiError(404, 'host_not_found', 'Host not found or not accessible');
+    if (host.device_id !== auth.deviceId)
+      throw new ApiError(403, 'host_owner_required', 'This host belongs to another device session');
+    if (!context.pushRelay) throw new ApiError(503, 'push_relay_unavailable', 'Push relay is not configured');
+    await claimAttentionBudget(db, `host:${id}`);
+    const devices = await context.pushRelay.select(auth.user.id, true, excludedDeviceIds);
+    const accepted = await context.pushRelay.wake(devices, { type: 'agentAttention', hostId: id, ...input });
+    return reply.code(202).send({ accepted });
+  });
   app.post('/v1/agents/hosts', async (request) => {
     const { auth, capability } = await requireRelay(request);
     const input = registration.parse(request.body);

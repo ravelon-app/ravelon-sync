@@ -12,6 +12,7 @@ import { type AppDatabase, openDatabase } from './db/database.js';
 import { verifyAccessToken } from './lib/crypto.js';
 import { ApiError } from './lib/errors.js';
 import { RateLimiter } from './lib/rate-limit.js';
+import { PushRelay } from './lib/push-relay.js';
 import { SyncEventHub } from './lib/sync-events.js';
 import { SYNC_BODY_LIMIT_BYTES } from './routes/sync.js';
 import { registerAgentRelayRoutes } from './routes/agent-relay.js';
@@ -69,7 +70,15 @@ export interface BuiltServer {
   syncEvents: SyncEventHub;
 }
 
-export async function buildServer(config: Config, db?: AppDatabase): Promise<BuiltServer> {
+export interface BuildServerOptions {
+  pushRelayFetch?: typeof fetch;
+}
+
+export async function buildServer(
+  config: Config,
+  db?: AppDatabase,
+  options: BuildServerOptions = {},
+): Promise<BuiltServer> {
   const database =
     db ??
     (await openDatabase({
@@ -109,7 +118,35 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
     config,
     limiter: new RateLimiter(config),
     syncEvents: new SyncEventHub(),
+    pushRelay: config.pushRelay
+      ? new PushRelay(database, config.pushRelay, options.pushRelayFetch)
+      : undefined,
+    publishVaultChange: async (event, sourceDeviceId) => {
+      context.syncEvents.publish(event);
+      try {
+        await context.pushRelay?.vaultChanged(event.vaultId, sourceDeviceId, event.cursor);
+      } catch {
+        app.log.warn('Push relay sync wake failed');
+      }
+    },
   };
+  if (context.pushRelay) {
+    let maintenance: Promise<void> | undefined;
+    const timer = setInterval(() => {
+      if (maintenance) return;
+      maintenance = context
+        .pushRelay!.cleanup()
+        .catch(() => app.log.warn('Push relay maintenance failed'))
+        .finally(() => {
+          maintenance = undefined;
+        });
+    }, 60_000);
+    timer.unref();
+    app.addHook('onClose', async () => {
+      clearInterval(timer);
+      await maintenance;
+    });
+  }
 
   await app.register(websocket, {
     errorHandler(error, socket) {
@@ -170,6 +207,7 @@ export async function buildServer(config: Config, db?: AppDatabase): Promise<Bui
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ApiError) {
+      if (error.retryAfterSeconds !== undefined) reply.header('Retry-After', String(error.retryAfterSeconds));
       return reply.code(error.status).send({
         error: {
           code: error.code,

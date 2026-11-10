@@ -394,5 +394,13 @@ Slack and Discord requests for the desktop are described in
 
 ## Live agent relay
 
+`POST /v1/push/devices` registers the authenticated live iOS session only when
+an HTTPS push relay is configured; optional `agentAlerts` defaults false.
+`DELETE /v1/push/devices` removes only that session and returns 204. Capabilities
+include optional `attention:1` only when configured. The owner-only
+`POST /v1/agents/hosts/:id/attention` accepts a strict v1 sealed event and
+optional bounded device exclusions; 202 means processing, not delivery.
+See [AGENT_RELAY.md](AGENT_RELAY.md) for schemas, lifecycle and retry limits.
+
 The separate authenticated, opaque live relay is described in [AGENT_RELAY.md](AGENT_RELAY.md).
 Ordinary vault sync and change hints retain their existing contract.

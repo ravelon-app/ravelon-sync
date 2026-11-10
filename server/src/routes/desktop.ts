@@ -403,11 +403,14 @@ export function registerDesktopRoutes(app: FastifyInstance, context: RouteContex
       { version },
       clientIp(request),
     );
-    syncEvents.publish({
-      type: 'vaultChanged',
-      vaultId: vault.id,
-      cursor: String(await vaultCursor(db, vault.id)),
-    });
+    await context.publishVaultChange(
+      {
+        type: 'vaultChanged',
+        vaultId: vault.id,
+        cursor: String(await vaultCursor(db, vault.id)),
+      },
+      auth.deviceId,
+    );
     return { vaultId: vault.id, version };
   });
 }

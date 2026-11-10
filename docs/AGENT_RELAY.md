@@ -1,5 +1,49 @@
 # Agent relay v1
 
+## Closed-app iOS alerts
+
+With the explicitly configured HTTPS push relay, capabilities add optional
+`attention:1`; otherwise it is absent and `POST /v1/push/devices` stores no
+token and answers `{registered:false}`. Registration validates the iOS token,
+environment and `app.ravelon.ios` topic, and optional boolean `agentAlerts`
+defaults false. A live session owns its registration. Token rotation and
+`DELETE /v1/push/devices` remove that session's old opaque relay subscription;
+deletion answers 204. Failed remote removals stay in a durable outbox and
+retry on later requests and once per minute. Expired/revoked/disabled sessions
+are excluded immediately; maintenance queues their remote removal. Account
+deletion removes local registrations. Remote subscriptions also expire at
+the session deadline, at most sixty days after registration.
+
+The owning live session may post `{v:1,event,ref,excludedDeviceIds?}` to
+`/v1/agents/hosts/:id/attention`. Events are exactly `approval`, `input`,
+`planReady`, `failed`, `completed`. The host UUID and optional excluded device
+UUIDs are canonical lowercase; up to 100 unique exclusions temporarily filter
+this account's devices and are never stored or forwarded. `ref` is canonical
+base64url with 40 through 512 ASCII characters and at least 28 sealed bytes. Extra fields, titles,
+paths and plaintext thread IDs are refused. This free self-hosted path has no
+Cloud licence or payment check.
+
+Selection requires an enabled account, opted-in iOS registration, matching
+device ownership and a live unrevoked/unexpired refresh session. Registration
+revalidates after remote HTTP, so sign-out or a newer registration in flight
+cannot enable a stale device. Its random `rps_` ID changes on registration,
+and cleanup never deletes a newer account's registration. The configured
+relay receives only selected opaque IDs and
+`{type:agentAttention,v:1,hostId,event,ref}`. Existing sync mutations forward
+`{type:vaultChanged,cursor}` to live vault-member devices independently of the
+agent-alert preference.
+
+The database enforces one event per host per ten seconds, sixty per sliding
+hour, across replicas. Rate timestamps expire after an hour of inactivity.
+A 429 has bounded `Retry-After` (1 through 3600 seconds); relay failures return
+503 and retry guidance, without including upstream bodies or credentials.
+202 `{accepted:number}` means accepted for processing, not displayed.
+
+`server/test/agent-attention.test.ts` exercises actual Fastify routes and an
+injected relay HTTP transport. The joint Cloud HTTP/2 capture exercises the
+APNs payload; neither proves Apple delivery. Final closed-app acceptance
+requires the signed iPhone build and real APNs service.
+
 The agent relay connects two authenticated sessions of the same account to a
 running desktop host. It is independent of encrypted vault record sync and its
 `vaultChanged` hints. The server forwards opaque JSON bodies without decrypting,

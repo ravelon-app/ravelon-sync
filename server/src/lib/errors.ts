@@ -5,6 +5,7 @@
  * desktop and iOS clients already read out of a failed response.
  */
 export class ApiError extends Error {
+  retryAfterSeconds?: number;
   constructor(
     public readonly status: number,
     public readonly code: string,

@@ -6,6 +6,7 @@ import type { AppDatabase } from '../db/database.js';
 import { ApiError } from '../lib/errors.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
 import type { SyncEventHub } from '../lib/sync-events.js';
+import type { PushRelay } from '../lib/push-relay.js';
 import { type PlatformSettings, readSetting } from '../lib/settings.js';
 
 export interface RouteContext {
@@ -13,6 +14,11 @@ export interface RouteContext {
   config: Config;
   limiter: RateLimiter;
   syncEvents: SyncEventHub;
+  pushRelay: PushRelay | undefined;
+  publishVaultChange: (
+    event: { type: 'vaultChanged'; vaultId: string; cursor: string },
+    sourceDeviceId: string,
+  ) => Promise<void>;
 }
 
 export function clientIp(request: FastifyRequest): string {
