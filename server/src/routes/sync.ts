@@ -12,10 +12,13 @@ import { MAX_SOCKETS_PER_USER } from '../lib/sync-events.js';
 import {
   compareRevision,
   encodedBytes,
+  includedItemTypes,
   insertSyncVersion,
   isUnchangedSyncItem,
   nextCursor,
+  OPT_IN_ITEM_TYPES,
   publicSyncItem,
+  SYNC_ITEM_TYPES,
   SYNC_PULL_PAGE_BYTES,
   SYNC_PULL_PAGE_SIZE,
   SYNC_PUSH_MAX_ITEMS,
@@ -239,8 +242,10 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
       .object({
         vaultId: z.string().min(1).max(160),
         cursor: z.coerce.number().int().nonnegative().default(0),
+        include: z.string().max(400).optional(),
       })
       .parse(request.query);
+    const included = includedItemTypes(query.include);
 
     const vault = await requireVaultAccess(db, auth.user.id, query.vaultId);
 
@@ -289,7 +294,11 @@ export function registerSyncRoutes(app: FastifyInstance, context: RouteContext):
     // reporting it lets the client notice and pull from the start again.
     const cursor = String(hasMore ? last : head);
 
-    return { cursor, hasMore, items: page.map(publicSyncItem) };
+    // Records of an opt-in type go only to a client that asked for them; the
+    // cursor above still carries every client past them.
+    const items = page.filter((row) => !OPT_IN_ITEM_TYPES.has(row.item_type) || included.has(row.item_type));
+
+    return { cursor, hasMore, items: items.map(publicSyncItem), itemTypes: [...SYNC_ITEM_TYPES] };
   });
 
   /**

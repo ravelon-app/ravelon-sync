@@ -74,6 +74,65 @@ describe('sync protocol', () => {
     await server.close();
   });
 
+  test('live backgrounds are stored, and pulled only by a client that asks for them', async () => {
+    const vaultId = 'live-vault';
+    const pushed = await api(server, 'POST', '/v1/sync/push', {
+      token: user.accessToken,
+      body: {
+        vaultId,
+        items: [
+          syncItem('host-live', vaultId),
+          syncItem('sea', vaultId, { itemType: 'LiveBackground' }),
+          syncItem('host-after', vaultId),
+        ],
+      },
+    });
+    assert.equal(pushed.status, 200);
+    assert.deepEqual(
+      pushed.body.results.map((result: { status: string }) => result.status),
+      ['stored', 'stored', 'stored'],
+    );
+
+    // An older desktop asks for nothing and never sees the type it would stop at.
+    const older = await api(server, 'GET', `/v1/sync/pull?vaultId=${vaultId}&cursor=0`, {
+      token: user.accessToken,
+    });
+    assert.equal(older.status, 200);
+    assert.deepEqual(
+      older.body.items.map((item: { id: string }) => item.id),
+      ['host-live', 'host-after'],
+    );
+    assert.ok(
+      older.body.itemTypes.includes('LiveBackground'),
+      'the answer says which types the server takes',
+    );
+
+    const current = await api(
+      server,
+      'GET',
+      `/v1/sync/pull?vaultId=${vaultId}&cursor=0&include=LiveBackground`,
+      {
+        token: user.accessToken,
+      },
+    );
+    assert.deepEqual(
+      current.body.items.map((item: { id: string; itemType: string }) => `${item.itemType}:${item.id}`),
+      ['Host:host-live', 'LiveBackground:sea', 'Host:host-after'],
+    );
+    assert.equal(older.body.cursor, current.body.cursor, 'both are carried past it');
+
+    // Only known opt-in types are honoured; anything else is still refused on push.
+    const unknown = await api(server, 'GET', `/v1/sync/pull?vaultId=${vaultId}&cursor=0&include=Nope,Host`, {
+      token: user.accessToken,
+    });
+    assert.equal(unknown.body.items.length, 2);
+    const refused = await api(server, 'POST', '/v1/sync/push', {
+      token: user.accessToken,
+      body: { vaultId, items: [syncItem('x', vaultId, { itemType: 'Nope' })] },
+    });
+    assert.equal(refused.status, 400);
+  });
+
   test('pages are bounded by bytes, and every record still arrives exactly once', async () => {
     const vaultId = 'big-vault';
     // Fifteen records of about 700 KB: more than one 8 MiB page, far fewer

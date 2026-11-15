@@ -166,7 +166,9 @@ client to edit VNC security settings.
 ```
 
 Up to 500 items, 64 MiB. `itemType` is one of `Host`, `Group`, `Identity`,
-`Snippet`, `PortForward`, `Preferences`, `IncidentCapsule`.
+`Snippet`, `PortForward`, `Preferences`, `IncidentCapsule`, `LiveBackground`
+(one animated workspace background of the desktop app; a client writes it only
+after a pull answer listed it in `itemTypes`).
 
 Each item is answered independently, because one stale record must not fail the
 other 499:
@@ -205,11 +207,17 @@ push falls back to last-writer-wins, which is what older clients rely on.
 **Rejected:** ciphertext that parses as JSON, or base64-decodes to readable
 JSON, gets `400 plaintext_sync_payload`.
 
-### `GET /v1/sync/pull?vaultId=&cursor=`
+### `GET /v1/sync/pull?vaultId=&cursor=&include=`
 
 ```json
-{ "cursor": "142", "hasMore": false, "items": [ … ] }
+{ "cursor": "142", "hasMore": false, "items": [ … ], "itemTypes": ["Host", "…", "LiveBackground"] }
 ```
+
+`itemTypes` lists every record type the server takes. Records of an opt-in
+type (`LiveBackground`) come back only when `include` names it
+(`include=LiveBackground`, comma-separated); older desktop clients stop at a
+type they do not know, so they never ask and never receive one. The cursor
+moves past such a record either way.
 
 Up to 500 records or about 8 MiB of ciphertext per page, whichever comes first,
 oldest first (a single larger record still gets a page of its own). Deletes
