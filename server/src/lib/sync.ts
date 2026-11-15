@@ -20,7 +20,23 @@ export const SYNC_ITEM_TYPES = new Set([
   'PortForward',
   'Preferences',
   'IncidentCapsule',
+  'LiveBackground',
 ]);
+
+/**
+ * Record types an older client cannot read. Ravelon desktop 0.15.4 and older
+ * stop every pull at a type they do not know, so a pull returns these only to
+ * a client that asks for them (`include`). Their cursor still moves past them,
+ * and pushing one needs no opt-in: only a client that saw the type listed in
+ * a pull answer (`itemTypes`) writes it.
+ */
+export const OPT_IN_ITEM_TYPES = new Set(['LiveBackground']);
+
+/** The opt-in types a pull asked for with `include=LiveBackground,…`. */
+export function includedItemTypes(include: string | undefined): Set<string> {
+  const asked = (include ?? '').split(',').map((type) => type.trim());
+  return new Set(asked.filter((type) => OPT_IN_ITEM_TYPES.has(type)));
+}
 
 /**
  * A pull page is bounded twice: by rows, and by the ciphertext it carries.

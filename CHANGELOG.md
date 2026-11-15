@@ -21,6 +21,12 @@ Notable changes, newest first. This project follows
 
 ### New
 
+- Live wallpapers sync as records of their own (`LiveBackground`), so the
+  desktop app's animated backgrounds no longer share one settings record that
+  could grow past the size limit. Pull answers list the record types the
+  server takes (`itemTypes`); a `LiveBackground` record goes only to a client
+  that asks for it with `include=LiveBackground`, so older desktop versions
+  keep syncing unchanged.
 - Public links: the Ravelon desktop app can share an artifact or agent
   thread as a page anyone with the link can open for 1, 7 or 30 days, and
   revoke it at any time. The page is sealed on the desktop under a key that
