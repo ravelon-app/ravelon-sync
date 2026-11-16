@@ -21,6 +21,9 @@ Notable changes, newest first. This project follows
 
 ### New
 
+- The official image is published for `linux/arm64` as well as
+  `linux/amd64`, so ARM hosts (Raspberry Pi, ARM VPS, Apple Silicon) can
+  `docker compose pull` it instead of building locally.
 - Live wallpapers sync as records of their own (`LiveBackground`), so the
   desktop app's animated backgrounds no longer share one settings record that
   could grow past the size limit. Pull answers list the record types the
